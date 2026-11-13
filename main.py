@@ -183,9 +183,7 @@ def plot_rwy_classes(
         rwy_classes[(rwy > low) & (rwy <= high)] = i + 1
     rwy_classes[rwy > RWY_BOUNDARIES[-1]] = len(RWY_BOUNDARIES)
 
-    counts = {
-        label: int(numpy.sum(rwy_classes == i)) for i, label in enumerate(RWY_LABELS)
-    }
+    counts = {label: int(numpy.sum(rwy_classes == i)) for i, label in enumerate(RWY_LABELS)}
     print(f"  RWY category counts: {counts}")
 
     n_classes = len(RWY_COLORS)
@@ -196,9 +194,7 @@ def plot_rwy_classes(
         output_path,
         title=title,
         cmap=mcolors.ListedColormap(RWY_COLORS),
-        norm=mcolors.BoundaryNorm(
-            boundaries=numpy.arange(n_classes + 1) - 0.5, ncolors=n_classes
-        ),
+        norm=mcolors.BoundaryNorm(boundaries=numpy.arange(n_classes + 1) - 0.5, ncolors=n_classes),
         cbar_label="Runoff Water Yield (RWY)",
         cbar_ticks=list(range(n_classes)),
         cbar_ticklabels=RWY_LABELS,
@@ -340,14 +336,12 @@ def run_wrc(
         for year in YEARS:
             # Runoff is the GCM-averaged quickflow for this scenario/year (the same
             # source RWY uses); water use doesn't depend on the climate model.
-            upstream_runoff, downstream_runoff = (
-                raster_preparation.prepare_runoff_rasters(
-                    upstream_hucs,
-                    downstream_hucs,
-                    climate_model,
-                    year,
-                    root_output_directory,
-                )
+            upstream_runoff, downstream_runoff = raster_preparation.prepare_runoff_rasters(
+                upstream_hucs,
+                downstream_hucs,
+                climate_model,
+                year,
+                root_output_directory,
             )
 
             to_sum = list[numpy.ndarray]()
@@ -401,17 +395,15 @@ def run_wrc(
             print(f"  Q_downstream_avg:  {Q_downstream_avg:.3f} mm/yr")
             print(f"  WW_downstream_avg: {WW_downstream_avg:.3f} mm/yr")
             print(f"  Scalar numerator:  {scalar_numer:.3f} mm/yr")
-            print(
-                f"  Denominator range: {numpy.nanmin(denominator):.3f} to {numpy.nanmax(denominator):.3f} mm/yr"
-            )
+            print(f"  Denominator range: {numpy.nanmin(denominator):.3f} to {numpy.nanmax(denominator):.3f} mm/yr")
             print(
                 f"  WRC range (pre-mask): {numpy.nanmin(wrc):.3f} to {numpy.nanmax(wrc):.3f}"
             )  # CRB values are naturally extreme due to insufficient river contribution
 
             # Mask nodata cells
-            nodata_mask = ~utilities.valid_mask(
-                qi, qi_profile["nodata"]
-            ) | ~utilities.valid_mask(wc, wc_profile["nodata"])
+            nodata_mask = ~utilities.valid_mask(qi, qi_profile["nodata"]) | ~utilities.valid_mask(
+                wc, wc_profile["nodata"]
+            )
             wrc[nodata_mask] = numpy.nan
             wrc[~numpy.isfinite(wrc)] = numpy.nan
 
@@ -470,21 +462,14 @@ def main():
             continue
 
         basin_hucs = pandas.concat(
-            [
-                geopandas.read_file(
-                    path.join("input", "HUC", huc2, "Shape", "WBDHU4.shp")
-                )
-                for huc2 in basin_huc2s
-            ]
+            [geopandas.read_file(path.join("input", "HUC", huc2, "Shape", "WBDHU4.shp")) for huc2 in basin_huc2s]
         )
         basin_hucs.columns = [column.lower() for column in basin_hucs.columns]
 
         upstream_hucs = basin_hucs[~basin_hucs["huc4"].isin(excluded_upstream_huc4s)]
         downstream_hucs = basin_hucs[basin_hucs["huc4"].isin(included_downstream_huc4s)]
 
-        output_directory = utilities.create_directory(
-            path.join("output", basin), exist_ok=True
-        )
+        output_directory = utilities.create_directory(path.join("output", basin), exist_ok=True)
 
         run_rwy(
             upstream_hucs,
