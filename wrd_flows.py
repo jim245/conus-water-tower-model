@@ -140,16 +140,12 @@ ARTIFACT_EDGES = {
 
 def is_artifact_edge(unit: str, dest: str, level: int) -> bool:
     return level < 12 and any(
-        len(from_code) <= level
-        and unit.startswith(from_code)
-        and dest.startswith(to_code)
+        len(from_code) <= level and unit.startswith(from_code) and dest.startswith(to_code)
         for from_code, to_code in ARTIFACT_EDGES
     )
 
 
-def build_flow_graph(
-    unit_destinations: pandas.DataFrame, level: int
-) -> dict[str, list[str]]:
+def build_flow_graph(unit_destinations: pandas.DataFrame, level: int) -> dict[str, list[str]]:
     """Reduce each unit's raw tounit tallies to its real downstream edge(s).
 
     Most HU12s within a unit drain to internal sinks ("CLOSED BASIN") rather than
@@ -185,8 +181,7 @@ def build_flow_graph(
                 )
             else:
                 print(
-                    f"  Note: {unit} has multiple candidate downstream units "
-                    f"{numeric_destinations}, using all of them"
+                    f"  Note: {unit} has multiple candidate downstream units {numeric_destinations}, using all of them"
                 )
 
         graph[unit] = [dest for dest, _count in numeric_destinations]
@@ -239,9 +234,7 @@ def build_ancestor_map(graph: dict[str, list[str]]) -> dict[str, set[str]]:
     return ancestor_map
 
 
-def sum_descendants(
-    graph: dict[str, list[str]], unit_totals: dict[str, numpy.ndarray]
-) -> dict[str, numpy.ndarray]:
+def sum_descendants(graph: dict[str, list[str]], unit_totals: dict[str, numpy.ndarray]) -> dict[str, numpy.ndarray]:
     """For every unit, `unit_totals` summed over every unit downstream of it (its
     descendants — excludes itself): the mirror of build_ancestor_map, pooled.
 
@@ -326,11 +319,7 @@ def trace_paths(origin: str, graph: dict[str, list[str]]) -> list[list[str]]:
         downstreams = graph.get(unit, [])
         if not downstreams:
             return [[unit]]
-        return [
-            [unit] + rest
-            for downstream in downstreams
-            for rest in walk(downstream, visited)
-        ]
+        return [[unit] + rest for downstream in downstreams for rest in walk(downstream, visited)]
 
     return walk(origin, frozenset())
 
@@ -341,9 +330,7 @@ def print_flow_chains(huc2s: list[str], level: int = 4) -> None:
     e.g. before trusting a hand-picked upstream/downstream huc4 split elsewhere
     (such as main.py's BASIN_MAPPINGS, or the 0807/0808/0809 mixup this module's
     ancestor-based approach was built to avoid)."""
-    unit_destinations = load_unit_destinations(
-        load_hu12s(huc2s, ignore_geometry=True), level
-    )
+    unit_destinations = load_unit_destinations(load_hu12s(huc2s, ignore_geometry=True), level)
     print(unit_destinations)
 
     graph = build_flow_graph(unit_destinations, level)
@@ -363,9 +350,7 @@ def print_flow_chains(huc2s: list[str], level: int = 4) -> None:
 # ── Units ─────────────────────────────────────────────────────────────────────
 
 
-def load_units(
-    huc2s: list[str], level: int, hu12s: geopandas.GeoDataFrame
-) -> geopandas.GeoDataFrame:
+def load_units(huc2s: list[str], level: int, hu12s: geopandas.GeoDataFrame) -> geopandas.GeoDataFrame:
     """Unit polygons for `level`, with their code in a "unit" column: huc4/huc8 from
     input/HUC's WBDHU{level} shapefiles (as main.py loads huc4s), huc12 from the
     NHDPlus GDB that the routing comes from."""
@@ -373,23 +358,14 @@ def load_units(
         units = hu12s[["huc12", "geometry"]].rename(columns={"huc12": "unit"})
     else:
         units = pandas.concat(
-            [
-                geopandas.read_file(
-                    path.join("input", "HUC", huc2, "Shape", f"WBDHU{level}.shp")
-                )
-                for huc2 in huc2s
-            ]
+            [geopandas.read_file(path.join("input", "HUC", huc2, "Shape", f"WBDHU{level}.shp")) for huc2 in huc2s]
         )
         units.columns = [column.lower() for column in units.columns]
-        units = units[[f"huc{level}", "geometry"]].rename(
-            columns={f"huc{level}": "unit"}
-        )
+        units = units[[f"huc{level}", "geometry"]].rename(columns={f"huc{level}": "unit"})
     return geopandas.GeoDataFrame(units, geometry="geometry").reset_index(drop=True)
 
 
-def rasterize_units(
-    units: geopandas.GeoDataFrame, profile: dict[str, Any]
-) -> numpy.ndarray:
+def rasterize_units(units: geopandas.GeoDataFrame, profile: dict[str, Any]) -> numpy.ndarray:
     """Label grid on `profile`'s grid: cell = 1 + its unit's row in `units`, 0 where
     no unit. all_touched=False (cell-centre rule) so a unit and its ancestors never
     share boundary cells; see utilities.clip_raster."""
@@ -411,8 +387,7 @@ def read_aligned(raster_path: str, profile: dict[str, Any] | None) -> tuple:
     """`raster_path` as float64 with nodata as NaN, checked to be on `profile`'s grid."""
     data, nodata, raster_profile = utilities.read_raster(raster_path)
     if profile is not None and (
-        raster_profile["transform"] != profile["transform"]
-        or data.shape != (profile["height"], profile["width"])
+        raster_profile["transform"] != profile["transform"] or data.shape != (profile["height"], profile["width"])
     ):
         raise ValueError(f"{raster_path} isn't on the same grid as the runoff raster")
     data = data.astype("float64")
@@ -445,12 +420,10 @@ def compute_unit_wrd(
 
     unit_surplus = numpy.bincount(
         flat_labels, weights=numpy.nan_to_num(runoff).ravel(), minlength=n_labels
-    ) - numpy.bincount(
-        flat_labels, weights=numpy.nan_to_num(consumption).ravel(), minlength=n_labels
+    ) - numpy.bincount(flat_labels, weights=numpy.nan_to_num(consumption).ravel(), minlength=n_labels)
+    n_cells = numpy.bincount(flat_labels, weights=(~numpy.isnan(b_L.ravel())).astype(float), minlength=n_labels).astype(
+        int
     )
-    n_cells = numpy.bincount(
-        flat_labels, weights=(~numpy.isnan(b_L.ravel())).astype(float), minlength=n_labels
-    ).astype(int)
     n_cells[0] = 0  # label 0 is "no unit"
 
     label_of = {code: label for label, code in enumerate(unit_codes, start=1)}
@@ -459,15 +432,11 @@ def compute_unit_wrd(
     divisor = numpy.full(n_labels, numpy.nan)
     rows = []
     for label, code in enumerate(unit_codes, start=1):
-        ancestor_labels = [
-            label_of[a] for a in ancestor_map.get(code, ()) if a in label_of
-        ]
+        ancestor_labels = [label_of[a] for a in ancestor_map.get(code, ()) if a in label_of]
         if not ancestor_labels or n_cells[label] == 0:
             continue
         upstream_surplus = float(unit_surplus[ancestor_labels].sum())
-        divisor[label] = (
-            upstream_surplus / n_cells[label] if upstream_surplus > 0 else numpy.inf
-        )
+        divisor[label] = upstream_surplus / n_cells[label] if upstream_surplus > 0 else numpy.inf
         rows.append(
             {
                 "unit": code,
@@ -483,29 +452,27 @@ def compute_unit_wrd(
     wrd = numpy.where(numpy.isinf(divisor[labels]) & ~numpy.isnan(b_L), 0.0, wrd)
     wrd[~numpy.isfinite(wrd)] = numpy.nan
 
-    return wrd, pandas.DataFrame(
-        rows, columns=["unit", "n_ancestors", "upstream_surplus", "n_cells"]
-    )
+    return wrd, pandas.DataFrame(rows, columns=["unit", "n_ancestors", "upstream_surplus", "n_cells"])
 
 
-def unit_stats(
-    wrd: numpy.ndarray, labels: numpy.ndarray, unit_codes: list[str]
-) -> pandas.DataFrame:
+def unit_stats(wrd: numpy.ndarray, labels: numpy.ndarray, unit_codes: list[str]) -> pandas.DataFrame:
     """utilities.compute_stats's min/q1/median/mean/q3/max for every unit at once."""
     valid = numpy.isfinite(wrd) & (labels > 0)
-    grouped = pandas.Series(wrd[valid]).groupby(
-        numpy.asarray(unit_codes)[labels[valid] - 1]
+    grouped = pandas.Series(wrd[valid]).groupby(numpy.asarray(unit_codes)[labels[valid] - 1])
+    return (
+        pandas.DataFrame(
+            {
+                "min": grouped.min(),
+                "q1": grouped.quantile(0.25),
+                "median": grouped.median(),
+                "mean": grouped.mean(),
+                "q3": grouped.quantile(0.75),
+                "max": grouped.max(),
+            }
+        )
+        .rename_axis("unit")
+        .reset_index()
     )
-    return pandas.DataFrame(
-        {
-            "min": grouped.min(),
-            "q1": grouped.quantile(0.25),
-            "median": grouped.median(),
-            "mean": grouped.mean(),
-            "q3": grouped.quantile(0.75),
-            "max": grouped.max(),
-        }
-    ).rename_axis("unit").reset_index()
 
 
 # ── Orchestration ─────────────────────────────────────────────────────────────
@@ -551,9 +518,7 @@ def plot_wrd_cells(
     norm = mcolors.BoundaryNorm(boundaries=boundaries, ncolors=7)
 
     height, width = wrd.shape
-    left, bottom, right, top = rasterio.transform.array_bounds(
-        height, width, profile["transform"]
-    )
+    left, bottom, right, top = rasterio.transform.array_bounds(height, width, profile["transform"])
     hucs_proj = hucs.to_crs(profile["crs"])
 
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -603,9 +568,7 @@ def plot_network_wrd(
     """One basin-wide choropleth: each unit colored by its own mean WRD (computed
     against its own true ancestor set — not blended with any other unit)."""
     plot_df = units.copy()
-    plot_df["mean_wrd"] = plot_df["unit"].map(
-        unit_summary.set_index("unit")["mean"]
-    )
+    plot_df["mean_wrd"] = plot_df["unit"].map(unit_summary.set_index("unit")["mean"])
     # Thousands of huc12 outlines would drown out the fill.
     linewidth = 0.3 if level == 4 else 0.05
 
@@ -625,9 +588,7 @@ def plot_network_wrd(
 
     fig, ax = plt.subplots(figsize=(10, 10))
     has_value = plot_df["mean_wrd"].notna()
-    plot_df[~has_value].plot(
-        ax=ax, color="whitesmoke", edgecolor="black", linewidth=linewidth
-    )
+    plot_df[~has_value].plot(ax=ax, color="whitesmoke", edgecolor="black", linewidth=linewidth)
     plot_df[has_value].plot(
         column="mean_wrd",
         cmap=cmap,
@@ -659,9 +620,7 @@ def plot_network_wrd(
     print(f"Network WRD map saved → {output_path}")
 
 
-def build_level(
-    huc2s: list[str], level: int, hu12s: geopandas.GeoDataFrame
-) -> dict[str, Any]:
+def build_level(huc2s: list[str], level: int, hu12s: geopandas.GeoDataFrame) -> dict[str, Any]:
     """Everything about `level`'s network that doesn't change between scenarios and
     years: unit polygons, true ancestor sets, hop tiers and outlets."""
     graph = build_flow_graph(load_unit_destinations(hu12s, level), level)
@@ -711,9 +670,7 @@ def run(
     results: dict[int, dict[str, dict[int, dict]]] = {level: {} for level in levels}
     for climate_model in climate_models:
         for year in years:
-            year_results = run_year(
-                hucs, climate_model, year, root_output_directory, networks
-            )
+            year_results = run_year(hucs, climate_model, year, root_output_directory, networks)
             for level, result in year_results.items():
                 results[level].setdefault(climate_model, {})[year] = result
     return results
@@ -727,15 +684,9 @@ def prepare_basin_rasters(
 ) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, dict[str, Any]]:
     """Basin-wide runoff, consumption (irr + pws-cu + thermoelectric) and pws-sw
     withdrawal in mm/yr, NaN as nodata, all on the runoff raster's 1 km grid."""
-    _, _, runoff_path = raster_preparation.prepare_runoff_raster_basin(
-        hucs, climate_model, year, root_output_directory
-    )
-    _, _, consumption_path = raster_preparation.prepare_wrd_consumption_raster(
-        hucs, root_output_directory, year
-    )
-    _, _, withdrawal_path = raster_preparation.prepare_withdrawal_raster_basin(
-        hucs, root_output_directory, year
-    )
+    _, _, runoff_path = raster_preparation.prepare_runoff_raster_basin(hucs, climate_model, year, root_output_directory)
+    _, _, consumption_path = raster_preparation.prepare_wrd_consumption_raster(hucs, root_output_directory, year)
+    _, _, withdrawal_path = raster_preparation.prepare_withdrawal_raster_basin(hucs, root_output_directory, year)
 
     runoff, profile = read_aligned(runoff_path, None)
     consumption, _ = read_aligned(consumption_path, profile)
@@ -750,14 +701,19 @@ def run_year(
     root_output_directory: str,
     networks: list[dict[str, Any]],
 ) -> dict[int, dict]:
-    runoff, consumption, withdrawal, profile = prepare_basin_rasters(
-        hucs, climate_model, year, root_output_directory
-    )
+    runoff, consumption, withdrawal, profile = prepare_basin_rasters(hucs, climate_model, year, root_output_directory)
 
     return {
         network["level"]: run_level(
-            hucs, climate_model, year, root_output_directory, network,
-            runoff, consumption, withdrawal, profile,
+            hucs,
+            climate_model,
+            year,
+            root_output_directory,
+            network,
+            runoff,
+            consumption,
+            withdrawal,
+            profile,
         )
         for network in networks
     }
@@ -780,21 +736,15 @@ def run_level(
     max_hop = network["max_hop"]
     unit_codes = units["unit"].tolist()
 
-    out_dir = path.join(
-        root_output_directory, "wrd", f"huc{level}", climate_model, str(year)
-    )
+    out_dir = path.join(root_output_directory, "wrd", f"huc{level}", climate_model, str(year))
     os.makedirs(out_dir, exist_ok=True)
 
     # Pass 1: WRD per individual unit, each against its own true ancestor set
     # (ancestor_map) — this is the part that must be correct.
     labels = rasterize_units(units, profile)
-    wrd, unit_summary = compute_unit_wrd(
-        labels, unit_codes, network["ancestor_map"], runoff, consumption, withdrawal
-    )
+    wrd, unit_summary = compute_unit_wrd(labels, unit_codes, network["ancestor_map"], runoff, consumption, withdrawal)
     unit_summary["hop"] = unit_summary["unit"].map(depth)
-    unit_summary = unit_summary.merge(
-        unit_stats(wrd, labels, unit_codes), on="unit", how="left"
-    )
+    unit_summary = unit_summary.merge(unit_stats(wrd, labels, unit_codes), on="unit", how="left")
     print(
         f"huc{level} ({climate_model}, {year}): WRD for {len(unit_summary)} of "
         f"{len(units)} units (the rest are headwaters or have no valid cells)"
@@ -821,9 +771,7 @@ def run_level(
         if not cumulative_units:
             continue
 
-        utilities.save_raster(
-            cumulative_wrd, profile, path.join(out_dir, f"tier-{hop}.tif")
-        )
+        utilities.save_raster(cumulative_wrd, profile, path.join(out_dir, f"tier-{hop}.tif"))
         stats = utilities.compute_stats(
             cumulative_wrd,
             f"WRD huc{level} tier {hop} (hops 1-{hop}, {climate_model}, {year})",
@@ -851,8 +799,7 @@ def run_level(
 
     summary_path = path.join(out_dir, f"huc{level}_summary.csv")
     unit_summary.rename(columns={"unit": f"huc{level}"})[
-        [f"huc{level}", "hop", "n_ancestors", "upstream_surplus", "n_cells",
-         "min", "q1", "median", "mean", "q3", "max"]
+        [f"huc{level}", "hop", "n_ancestors", "upstream_surplus", "n_cells", "min", "q1", "median", "mean", "q3", "max"]
     ].sort_values(f"huc{level}").to_csv(summary_path, index=False)
     print(f"Per-huc{level} summary saved → {summary_path}")
 
