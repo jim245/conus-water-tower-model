@@ -215,7 +215,7 @@ def run_rwy(
 
         profile = None
         for year in YEARS:
-            downstream, upstream = raster_preparation.prepare_quickflow_rasters(
+            upstream, downstream = raster_preparation.prepare_quickflow_rasters(
                 upstream_hucs,
                 downstream_hucs,
                 climate_model,
