@@ -14,13 +14,9 @@ def prepare_irr_rasters(
     year: int,
     region_tag: str,
 ) -> utilities.RasterResult:
-    output_directory = utilities.create_directory(
-        path.join(root_output_directory, "irr")
-    )
+    output_directory = utilities.create_directory(path.join(root_output_directory, "irr"))
 
-    data, nodata, profile = utilities.read_raster(
-        path.join("input", "irr", f"irr_huc12_{year}.tif")
-    )
+    data, nodata, profile = utilities.read_raster(path.join("input", "irr", f"irr_huc12_{year}.tif"))
     converted, converted_profile, _ = utilities.convert_mgd_to_mm_per_year(
         data,
         nodata,
@@ -44,9 +40,7 @@ def average_quickflow_raster(
     """Cell-wise mean of every GCM's quickflow for one scenario (e.g. SSP245) and
     year, on Quickflow's native grid."""
 
-    output_directory = utilities.create_directory(
-        path.join(root_output_directory, "quickflow", quickflow_model)
-    )
+    output_directory = utilities.create_directory(path.join(root_output_directory, "quickflow", quickflow_model))
 
     quickflow_raster_paths = glob.glob(
         path.join(
@@ -87,9 +81,7 @@ def prepare_quickflow_rasters(
 ) -> tuple[utilities.RasterResult, utilities.RasterResult]:
     """ """
 
-    output_directory = utilities.create_directory(
-        path.join(root_output_directory, "quickflow", quickflow_model)
-    )
+    output_directory = utilities.create_directory(path.join(root_output_directory, "quickflow", quickflow_model))
 
     averaged_quickflow, averaged_profile, _ = average_quickflow_raster(
         quickflow_model, quickflow_year, root_output_directory
@@ -125,16 +117,10 @@ def prepare_quickflow_runoff_raster(
     """The GCM-averaged quickflow for `climate_model`/`year`, used as WRC/WRD's
     runoff: reprojected onto the pws-tot grid so it lines up cell-for-cell with the
     water-use rasters, and converted to mm/yr."""
-    runoff_output_directory = utilities.create_directory(
-        path.join(root_output_directory, "runoff", climate_model)
-    )
+    runoff_output_directory = utilities.create_directory(path.join(root_output_directory, "runoff", climate_model))
 
-    data, profile, _ = average_quickflow_raster(
-        climate_model, year, root_output_directory
-    )
-    reference_profile = utilities.read_raster_profile(
-        path.join("input", "pws-tot", f"pws-tot_huc12_{year}.tif")
-    )
+    data, profile, _ = average_quickflow_raster(climate_model, year, root_output_directory)
+    reference_profile = utilities.read_raster_profile(path.join("input", "pws-tot", f"pws-tot_huc12_{year}.tif"))
 
     return utilities.reproject_raster(
         data,
@@ -156,9 +142,7 @@ def prepare_runoff_rasters(
 ) -> tuple[utilities.RasterResult, utilities.RasterResult]:
     runoff_output_directory = path.join(root_output_directory, "runoff", climate_model)
 
-    reprojected, reprojected_profile, _ = prepare_quickflow_runoff_raster(
-        climate_model, year, root_output_directory
-    )
+    reprojected, reprojected_profile, _ = prepare_quickflow_runoff_raster(climate_model, year, root_output_directory)
 
     upstream = utilities.clip_raster(
         reprojected,
@@ -182,9 +166,7 @@ def prepare_runoff_raster_basin(
     year: int,
     root_output_directory: str,
 ) -> utilities.RasterResult:
-    reprojected, reprojected_profile, _ = prepare_quickflow_runoff_raster(
-        climate_model, year, root_output_directory
-    )
+    reprojected, reprojected_profile, _ = prepare_quickflow_runoff_raster(climate_model, year, root_output_directory)
 
     return utilities.clip_raster(
         reprojected,
@@ -260,14 +242,10 @@ def prepare_pws_withdrawal_raster(
     withdrawals don't come out of the runoff these indices compare against. Not
     withdrawal minus pws-cu: that difference is return flow (water discharged back
     downstream), not water taken out of the river."""
-    pws_wd_output_directory = utilities.create_directory(
-        path.join(root_output_directory, "pws-wd")
-    )
+    pws_wd_output_directory = utilities.create_directory(path.join(root_output_directory, "pws-wd"))
 
     # path: input/pws-sw/pws-sw_huc12_{year}.tif
-    sw_data, sw_nodata, sw_profile = utilities.read_raster(
-        path.join("input", "pws-sw", f"pws-sw_huc12_{year}.tif")
-    )
+    sw_data, sw_nodata, sw_profile = utilities.read_raster(path.join("input", "pws-sw", f"pws-sw_huc12_{year}.tif"))
     return utilities.convert_mgd_to_mm_per_year(
         sw_data,
         sw_nodata,
@@ -283,14 +261,10 @@ def prepare_pws_rasters(
     root_output_directory: str,
     year: int = 2010,
 ) -> tuple[utilities.RasterResult, utilities.RasterResult]:
-    pws_output_directory = utilities.create_directory(
-        path.join(root_output_directory, "pws")
-    )
+    pws_output_directory = utilities.create_directory(path.join(root_output_directory, "pws"))
 
     # path: input/pws-cu/pws-cu_huc12_{year}.tif
-    cu_data, cu_nodata, cu_profile = utilities.read_raster(
-        path.join("input", "pws-cu", f"pws-cu_huc12_{year}.tif")
-    )
+    cu_data, cu_nodata, cu_profile = utilities.read_raster(path.join("input", "pws-cu", f"pws-cu_huc12_{year}.tif"))
     converted_cu, converted_cu_profile, _ = utilities.convert_mgd_to_mm_per_year(
         cu_data,
         cu_nodata,
@@ -308,9 +282,7 @@ def prepare_pws_rasters(
     )
 
     # pws-wd
-    pws_wd_data, pws_wd_profile, _ = prepare_pws_withdrawal_raster(
-        root_output_directory, year
-    )
+    pws_wd_data, pws_wd_profile, _ = prepare_pws_withdrawal_raster(root_output_directory, year)
     pws_wd_result = utilities.clip_raster(
         pws_wd_data,
         pws_wd_profile,
@@ -327,9 +299,7 @@ def prepare_withdrawal_raster_basin(
     year: int,
 ) -> utilities.RasterResult:
     """pws-sw (surface-water public-supply withdrawal), basin-wide."""
-    pws_wd, pws_wd_profile, _ = prepare_pws_withdrawal_raster(
-        root_output_directory, year
-    )
+    pws_wd, pws_wd_profile, _ = prepare_pws_withdrawal_raster(root_output_directory, year)
 
     return utilities.clip_raster(
         pws_wd,
@@ -345,16 +315,10 @@ def prepare_wrd_consumption_raster(
     year: int,
 ) -> utilities.RasterResult:
     """irr + pws-cu consumptive-use + thermoelectric consumption, basin-wide."""
-    irr_raster, irr_profile, irr_path = prepare_irr_rasters(
-        hucs, root_output_directory, year, region_tag="basin"
-    )
+    irr_raster, irr_profile, irr_path = prepare_irr_rasters(hucs, root_output_directory, year, region_tag="basin")
 
-    consumption_output_directory = utilities.create_directory(
-        path.join(root_output_directory, "pws")
-    )
-    cu_data, cu_nodata, cu_profile = utilities.read_raster(
-        path.join("input", "pws-cu", f"pws-cu_huc12_{year}.tif")
-    )
+    consumption_output_directory = utilities.create_directory(path.join(root_output_directory, "pws"))
+    cu_data, cu_nodata, cu_profile = utilities.read_raster(path.join("input", "pws-cu", f"pws-cu_huc12_{year}.tif"))
     converted_cu, converted_cu_profile, _ = utilities.convert_mgd_to_mm_per_year(
         cu_data,
         cu_nodata,
