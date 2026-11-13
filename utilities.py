@@ -119,9 +119,7 @@ def clip_raster(
             )
 
     clipped_profile = dict(profile)
-    clipped_profile.update(
-        height=clipped.shape[1], transform=clipped_transform, width=clipped.shape[2]
-    )
+    clipped_profile.update(height=clipped.shape[1], transform=clipped_transform, width=clipped.shape[2])
     clipped = clipped.squeeze()
 
     return save_raster(clipped, clipped_profile, output_path)
@@ -175,9 +173,7 @@ def reproject_raster(
     width = reference_profile["width"]
     height = reference_profile["height"]
 
-    profile.update(
-        crs=reprojected_crs, height=height, transform=dst_transform, width=width
-    )
+    profile.update(crs=reprojected_crs, height=height, transform=dst_transform, width=width)
 
     destination = numpy.full((height, width), nodata, dtype=dtype)
 
@@ -195,13 +191,9 @@ def reproject_raster(
 
     if scale_factor != 1.0:
         valid: numpy.ndarray = (
-            numpy.isfinite(destination)
-            if (nodata is None or numpy.isnan(nodata))
-            else (destination != nodata)
+            numpy.isfinite(destination) if (nodata is None or numpy.isnan(nodata)) else (destination != nodata)
         )
-        destination = numpy.where(
-            valid, destination * scale_factor, destination
-        ).astype(dtype)
+        destination = numpy.where(valid, destination * scale_factor, destination).astype(dtype)
 
     return save_raster(destination, profile, output_path)
 
@@ -215,16 +207,10 @@ def convert_mgd_to_mm_per_year(
 ) -> RasterResult:
     cell_area_m2 = abs(profile["transform"].a * profile["transform"].e)
 
-    is_nodata = (
-        numpy.isnan(data) if (nodata is None or numpy.isnan(nodata)) else data == nodata
-    )
+    is_nodata = numpy.isnan(data) if (nodata is None or numpy.isnan(nodata)) else data == nodata
     # 1 MGD × days/yr × 3785.411784 m³/(M gal) × 1000 mm/m / cell_area_m² = mm/yr
-    conversion_factor = (
-        (366 if int(year) % 4 == 0 else 365) * 3785.411784 * 1000 / cell_area_m2
-    )
-    result = numpy.where(is_nodata, numpy.nan, data * conversion_factor).astype(
-        numpy.float32
-    )
+    conversion_factor = (366 if int(year) % 4 == 0 else 365) * 3785.411784 * 1000 / cell_area_m2
+    result = numpy.where(is_nodata, numpy.nan, data * conversion_factor).astype(numpy.float32)
 
     return save_raster(result, profile, output_path)
 
@@ -251,16 +237,12 @@ def save_raster(arr: numpy.ndarray, profile: dict[str, Any], path: str) -> Raste
     return out, profile, path
 
 
-def sum_rasters(
-    arrays: list[numpy.ndarray], profile: dict[str, Any], output_path: str
-) -> RasterResult:
+def sum_rasters(arrays: list[numpy.ndarray], profile: dict[str, Any], output_path: str) -> RasterResult:
     """Sum multiple rasters cell-by-cell. Cells that are nodata in all inputs stay nodata;
     cells with at least one valid value are summed over valid inputs only."""
     for arr in arrays:
         if arr.shape != arrays[0].shape:
-            raise ValueError(
-                f"Shape mismatch: expected {arrays[0].shape}, got {arr.shape}"
-            )
+            raise ValueError(f"Shape mismatch: expected {arrays[0].shape}, got {arr.shape}")
 
     stack = numpy.stack(arrays)
     result = numpy.nansum(stack, axis=0).astype(numpy.float64)
@@ -295,9 +277,7 @@ def plot_raster_map(
     cmap.set_bad(alpha=0)  # transparent nodata
 
     height, width = data.shape
-    left, bottom, right, top = transform.array_bounds(
-        height, width, profile["transform"]
-    )
+    left, bottom, right, top = transform.array_bounds(height, width, profile["transform"])
     hucs_proj = hucs.to_crs(profile["crs"])
     huc_union = hucs_proj.geometry.union_all()
 
@@ -314,9 +294,9 @@ def plot_raster_map(
     # Pad large enough to cover any axis expansion from set_aspect("equal"):
     # worst case is (max_dim - min_dim) / 2, so 2× max_dim is always sufficient.
     pad = max(view_right - view_left, view_top - view_bottom) * 2
-    outside_mask = shapely_box(
-        view_left - pad, view_bottom - pad, view_right + pad, view_top + pad
-    ).difference(huc_union)
+    outside_mask = shapely_box(view_left - pad, view_bottom - pad, view_right + pad, view_top + pad).difference(
+        huc_union
+    )
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
@@ -339,9 +319,7 @@ def plot_raster_map(
     pin_limits()
 
     # aspect=None prevents geopandas from calling ax.set_aspect internally.
-    geopandas.GeoSeries([outside_mask], crs=profile["crs"]).plot(
-        ax=ax, color="white", zorder=1, aspect=None
-    )
+    geopandas.GeoSeries([outside_mask], crs=profile["crs"]).plot(ax=ax, color="white", zorder=1, aspect=None)
     pin_limits()
 
     img = ax.imshow(
