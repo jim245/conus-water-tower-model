@@ -24,7 +24,6 @@ dependencies:
   - click-plugins=1.1.1.2=pyhd8ed1ab_0
   - cligj=0.7.2=pyhd8ed1ab_2
   - cloudpickle=3.1.2=pyhcf101f3_1
-  - contextily=1.7.1=pyhd8ed1ab_0
   - contourpy=1.4.0=py314h5383ef5_1
   - cpython=3.14.10=py314hd8ed1ab_100
   - cycler=0.12.1=pyhcf101f3_2
@@ -141,7 +140,6 @@ dependencies:
   - markupsafe=3.0.4=py314h93e9acf_4
   - matplotlib=3.11.2=py314h815e797_1
   - matplotlib-base=3.11.2=py314h9124352_1
-  - mercantile=1.2.1=pyhd8ed1ab_1
   - minizip=4.2.2=haac24f3_1
   - munkres=1.1.4=pyhd8ed1ab_1
   - muparser=2.3.5=hee9eb32_1
