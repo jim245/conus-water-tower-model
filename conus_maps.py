@@ -119,7 +119,6 @@ def plot_rwy(
         cmap=plt.get_cmap("YlOrRd").copy(),
         norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
         cbar_label="Runoff Water Yield (RWY)",
-        basemap=False,
     )
 
 
@@ -175,7 +174,6 @@ def run():
                     cmap=plt.get_cmap("viridis").copy(),
                     norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
                     cbar_label="Water Resource Contribution (WRC)",
-                    basemap=False,
                 )
                 continue  # WRD has no diff
 
@@ -247,7 +245,6 @@ def run_diffs(hucs: geopandas.GeoDataFrame) -> None:
                     cmap=plt.get_cmap(cmap).copy(),
                     norm=norm,
                     cbar_label=f"Δ {cbar_label}",
-                    basemap=False,
                 )
 
 

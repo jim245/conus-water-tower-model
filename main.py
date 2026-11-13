@@ -198,7 +198,6 @@ def plot_rwy_classes(
         cbar_label="Runoff Water Yield (RWY)",
         cbar_ticks=list(range(n_classes)),
         cbar_ticklabels=RWY_LABELS,
-        basemap=False,
     )
 
 
@@ -274,7 +273,6 @@ def run_rwy(
             cmap=plt.get_cmap("YlOrRd").copy(),
             norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
             cbar_label="Runoff Water Yield (RWY)",
-            basemap=False,
         )
 
 
@@ -316,7 +314,6 @@ def plot_wrc_classes(
         cbar_label="Water Resource Contribution (WRC)",
         cbar_ticks=[0, 1, 2, 3],
         cbar_ticklabels=["≤ -1", "-1 to 0", "0 to 1", "> 1"],
-        basemap=False,
     )
 
 
@@ -344,28 +341,22 @@ def run_wrc(
                 root_output_directory,
             )
 
-            to_sum = list[numpy.ndarray]()
-            irr_raster, qi_profile, irr_path = raster_preparation.prepare_irr_rasters(
+            irr = raster_preparation.prepare_irr_rasters(
                 upstream_hucs, root_output_directory, year, region_tag="upstream"
             )
-            to_sum.append(irr_raster)
             upstream_pws, downstream_pws = raster_preparation.prepare_pws_rasters(
                 upstream_hucs, downstream_hucs, root_output_directory, year
             )
-            to_sum.append(upstream_pws[0])
-            to_sum.append(
-                raster_preparation.prepare_thermoelectric_rasters(
-                    upstream_hucs,
-                    root_output_directory,
-                    year,
-                    region_tag="upstream",
-                    reference_raster_path=irr_path,
-                )[0]
+            thermoelectric = raster_preparation.prepare_thermoelectric_rasters(
+                upstream_hucs,
+                root_output_directory,
+                year,
+                region_tag="upstream",
+                reference_raster_path=irr[2],
             )
 
             consumption_sum = utilities.sum_rasters(
-                to_sum,
-                qi_profile,
+                [irr, upstream_pws, thermoelectric],
                 path.join(root_output_directory, f"{year}-consumption_total.tif"),
             )
 
@@ -448,7 +439,6 @@ def run_wrc(
             cmap=plt.get_cmap("viridis").copy(),
             norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
             cbar_label="Water Resource Contribution (WRC)",
-            basemap=False,
         )
 
 

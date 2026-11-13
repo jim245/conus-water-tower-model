@@ -21,7 +21,7 @@ def prepare_irr_rasters(
         data,
         nodata,
         profile,
-        str(year),
+        year,
         path.join(output_directory, f"{year}-mm-per-year.tif"),
     )
     return utilities.clip_raster(
@@ -125,7 +125,6 @@ def prepare_quickflow_runoff_raster(
     return utilities.reproject_raster(
         data,
         profile,
-        "EPSG:5070",
         reference_profile,
         path.join(runoff_output_directory, f"{year}-reprojected.tif"),
         resampling_method=enums.Resampling.average,
@@ -211,7 +210,6 @@ def prepare_thermoelectric_rasters(
     reprojected, reprojected_profile, _ = utilities.reproject_raster(
         clipped,
         clip_profile,
-        "EPSG:5070",
         reference_profile,
         path.join(
             thermoelectric_output_dir,
@@ -224,7 +222,7 @@ def prepare_thermoelectric_rasters(
         reprojected,
         reprojected_profile["nodata"],
         reprojected_profile,
-        str(year),
+        year,
         path.join(
             thermoelectric_output_dir,
             f"{year}-consumption-annual-mm-per-year-{region_tag}.tif",
@@ -250,7 +248,7 @@ def prepare_pws_withdrawal_raster(
         sw_data,
         sw_nodata,
         sw_profile,
-        str(year),
+        year,
         path.join(pws_wd_output_directory, f"{year}.tif"),
     )
 
@@ -269,7 +267,7 @@ def prepare_pws_rasters(
         cu_data,
         cu_nodata,
         cu_profile,
-        str(year),
+        year,
         path.join(pws_output_directory, f"{year}-cu-mm-per-year.tif"),
     )
 
@@ -315,7 +313,7 @@ def prepare_wrd_consumption_raster(
     year: int,
 ) -> utilities.RasterResult:
     """irr + pws-cu consumptive-use + thermoelectric consumption, basin-wide."""
-    irr_raster, irr_profile, irr_path = prepare_irr_rasters(hucs, root_output_directory, year, region_tag="basin")
+    irr = prepare_irr_rasters(hucs, root_output_directory, year, region_tag="basin")
 
     consumption_output_directory = utilities.create_directory(path.join(root_output_directory, "pws"))
     cu_data, cu_nodata, cu_profile = utilities.read_raster(path.join("input", "pws-cu", f"pws-cu_huc12_{year}.tif"))
@@ -323,26 +321,25 @@ def prepare_wrd_consumption_raster(
         cu_data,
         cu_nodata,
         cu_profile,
-        str(year),
+        year,
         path.join(consumption_output_directory, f"{year}-cu-mm-per-year.tif"),
     )
-    pws_cu_basin, _, _ = utilities.clip_raster(
+    pws_cu_basin = utilities.clip_raster(
         converted_cu,
         converted_cu_profile,
         hucs.geometry,
         path.join(consumption_output_directory, f"{year}-cu-basin.tif"),
     )
 
-    thermo_basin, _, _ = prepare_thermoelectric_rasters(
+    thermo_basin = prepare_thermoelectric_rasters(
         hucs,
         root_output_directory,
         year,
         region_tag="basin",
-        reference_raster_path=irr_path,
+        reference_raster_path=irr[2],
     )
 
     return utilities.sum_rasters(
-        [irr_raster, pws_cu_basin, thermo_basin],
-        irr_profile,
+        [irr, pws_cu_basin, thermo_basin],
         path.join(root_output_directory, f"{year}-wrd-consumption-basin.tif"),
     )

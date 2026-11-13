@@ -1,7 +1,15 @@
-import os
-from typing import Any, Sequence
+"""
+Raster helpers that the pipeline modules share: read, save, clip, reproject, sum, unit conversion and maps.
 
-import contextily
+Each helper that writes a raster calls save_raster, which writes single-band float32 with NaN as nodata.
+"""
+
+import calendar
+import os
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
 import geopandas
 import matplotlib.pyplot as plt
 import numpy
@@ -9,29 +17,45 @@ import rasterio
 from matplotlib.colors import Colormap, Normalize
 from numpy.typing import NDArray
 from rasterio import enums, io, mask, transform, warp
-from shapely.geometry import box as shapely_box
+from rasterio.crs import CRS
 
 RasterResult = tuple[numpy.ndarray, dict[str, Any], str]  # (data, profile, path)
+
+CUBIC_METRES_PER_MILLION_GALLONS = 3785.411784
+MM_PER_M = 1000
 
 
 def create_directory(directory: str, exist_ok: bool = True) -> str:
     """
-    Creates a specified directory and all intermediate directories.
+    Creates a directory and its missing parent directories.
 
     Parameters:
         directory (str): The directory path to create.
-        exist_ok (bool = True): Returns an error if False and the directory already exists.
+        exist_ok (bool = True): Raises FileExistsError if False and the directory exists.
 
     Returns:
-        directory (str): The created directory path.
+        directory (str): The directory path.
     """
 
-    os.makedirs(directory, exist_ok=exist_ok)
+    Path(directory).mkdir(parents=True, exist_ok=exist_ok)
     return directory
 
 
 def compute_stats(arr: numpy.ndarray, label: str) -> dict[str, float]:
-    """Min/max/mean/median/quartiles over finite cells."""
+    """
+    Computes the min, quartiles, median, mean and max of the finite cells, and prints them.
+
+    Parameters:
+        arr (numpy.ndarray): The raster data.
+        label (str): The name of the data, for the printed line and the error message.
+
+    Returns:
+        stats (dict[str, float]): The statistics, by the keys min, q1, median, mean, q3 and max.
+
+    Raises:
+        ValueError: If no cell is finite.
+    """
+
     valid = arr[numpy.isfinite(arr)]
     if valid.size == 0:
         raise ValueError(f"{label} has no valid data for statistics")
@@ -58,16 +82,36 @@ def compute_diff(
     profile: dict[str, Any],
     output_path: str,
 ) -> RasterResult:
-    diff = ending_data - starting_data
-    diff[~numpy.isfinite(diff)] = numpy.nan
-    result = save_raster(diff, profile, output_path)
+    """
+    Writes ending_data - starting_data with save_raster.
+
+    A cell that is NaN in one of the two inputs is NaN in the diff.
+
+    Parameters:
+        starting_data (numpy.ndarray): The raster of the first year.
+        ending_data (numpy.ndarray): The raster of the last year, on the same grid.
+        profile (dict[str, Any]): The profile of the grid.
+        output_path (str): The path to the output file.
+
+    Returns:
+        result (RasterResult): The save_raster result.
+    """
+
+    result = save_raster(ending_data - starting_data, profile, output_path)
     print(f"  diff saved → {output_path}")
     return result
 
 
-def valid_mask(arr: NDArray[numpy.floating], nodata: Any) -> NDArray[numpy.bool]:
+def valid_mask(arr: NDArray[numpy.floating], nodata: float | None) -> NDArray[numpy.bool]:
     """
-    Returns true where arr is finite and not nodata.
+    Finds the cells that are finite and not nodata.
+
+    Parameters:
+        arr (NDArray[numpy.floating]): The raster data.
+        nodata (float | None): The nodata value. None or NaN when only the non-finite cells are invalid.
+
+    Returns:
+        valid (NDArray[numpy.bool]): True for the valid cells.
     """
 
     if nodata is None:
@@ -76,12 +120,26 @@ def valid_mask(arr: NDArray[numpy.floating], nodata: Any) -> NDArray[numpy.bool]
     return numpy.isfinite(arr) & (arr != nodata)
 
 
-def safe_mean(arr: NDArray[numpy.floating], nodata: Any) -> float:
+def safe_mean(arr: NDArray[numpy.floating], nodata: float | None) -> float:
     """
-    Mean of finite, non-negative, non-nodata values.
+    Computes the mean of the finite, non-negative cells that are not nodata.
+
+    Parameters:
+        arr (NDArray[numpy.floating]): The raster data.
+        nodata (float | None): The nodata value (see valid_mask).
+
+    Returns:
+        mean (float): The mean.
+
+    Raises:
+        ValueError: If no cell is valid.
     """
 
-    return float(numpy.mean(arr[valid_mask(arr, nodata) & (arr >= 0)]))
+    valid = arr[valid_mask(arr, nodata) & (arr >= 0)]
+    if valid.size == 0:
+        raise ValueError("no finite, non-negative cell for the mean")
+
+    return float(numpy.mean(valid))
 
 
 def clip_raster(
@@ -91,164 +149,225 @@ def clip_raster(
     output_path: str,
 ) -> RasterResult:
     """
-    Clips the provided raster using the provided mask.
+    Clips a raster to the mask polygons, crops it to their bounds, and writes it with save_raster.
+
+    Cells outside the polygons are NaN.
 
     Parameters:
-      data (numpy.ndarray): The raster data to clip.
-      profile (dict): The raster's profile.
-      raster_mask (geopandas.GeoSeries): The mask to clip to.
-      output_path (str): The path to the output file.
+        data (numpy.ndarray): The (height, width) raster data.
+        profile (dict[str, Any]): The profile of the raster.
+        raster_mask (geopandas.GeoSeries): The polygons to clip to, in any CRS.
+        output_path (str): The path to the output file.
 
     Returns:
-      RasterResult: The clipped data, its updated profile, and output_path.
+        result (RasterResult): The save_raster result.
     """
 
-    with io.MemoryFile() as memfile:
-        with memfile.open(**profile) as dataset:
-            dataset.write(data, 1)
-            raster_mask = raster_mask.to_crs(dataset.crs)
-            # all_touched=False: a cell belongs to the polygon containing its centre,
-            # so cells on a shared boundary (e.g. upstream/downstream) land on
-            # exactly one side instead of being counted on both.
-            clipped, clipped_transform = mask.mask(
-                dataset,
-                raster_mask.geometry,
-                all_touched=False,
-                crop=True,
-                nodata=numpy.nan,
-            )
+    with io.MemoryFile() as memfile, memfile.open(**profile) as dataset:
+        dataset.write(data, 1)
+        # all_touched=False: a cell belongs to the polygon that contains its centre. Thus a cell on a shared boundary
+        # (for example upstream/downstream) goes to one side only
+        clipped, clipped_transform = mask.mask(
+            dataset,
+            raster_mask.to_crs(dataset.crs).geometry,
+            all_touched=False,
+            crop=True,
+            nodata=numpy.nan,
+        )
 
     clipped_profile = dict(profile)
     clipped_profile.update(height=clipped.shape[1], transform=clipped_transform, width=clipped.shape[2])
-    clipped = clipped.squeeze()
 
-    return save_raster(clipped, clipped_profile, output_path)
+    return save_raster(clipped[0], clipped_profile, output_path)
 
 
 def reproject_raster(
     data: numpy.ndarray,
     source_profile: dict[str, Any],
-    reprojected_crs: str,
     reference_profile: dict[str, Any],
     output_path: str,
-    dtype: type = numpy.float32,
-    nodata: Any = numpy.nan,
-    resampling_method: enums.Resampling = enums.Resampling.mode,
+    *,
+    resampling_method: enums.Resampling,
     scale_factor: float = 1.0,
 ) -> RasterResult:
     """
-    Reprojects (and resamples if necessary) the provided raster.
+    Reprojects and resamples a raster onto the grid of the reference profile, and writes it with save_raster.
+
+    Cells that are nodata in the source do not contribute.
 
     Parameters:
-      data (numpy.ndarray): The raster data to reproject.
-      source_profile (dict): The raster's profile.
-      reprojected_crs (str): The target CRS for the generated rasters.
-      reference_profile (dict): The profile (grid/transform/size) to reproject onto.
-      output_path (str): The path to the output file.
-      dtype (type): The datatype the raster should be in.
-      nodata (Any): The nodata value to use in the raster.
-      resampling_method (enums.Resampling): The raster resampling method to use. Defaults to enums.Resampling.average.
+        data (numpy.ndarray): The (height, width) raster data.
+        source_profile (dict[str, Any]): The profile of the raster.
+        reference_profile (dict[str, Any]): The profile whose CRS, transform and size the output gets.
+        output_path (str): The path to the output file.
+        resampling_method (enums.Resampling): The resampling method. Use sum for a total per cell, and average for a
+            value per area.
+        scale_factor (float = 1.0): The factor for each output cell, for example for a unit conversion.
 
     Returns:
-      RasterResult: The reprojected data, its updated profile, and output_path.
+        result (RasterResult): The save_raster result.
     """
 
+    source = numpy.where(valid_mask(data, source_profile.get("nodata")), data, numpy.nan).astype(numpy.float32)
+
     profile = dict(source_profile)
-    profile.update(compress="lzw", driver="GTiff")
+    profile.update(
+        compress="lzw",
+        driver="GTiff",
+        crs=reference_profile["crs"],
+        transform=reference_profile["transform"],
+        width=reference_profile["width"],
+        height=reference_profile["height"],
+    )
 
-    # override nodata safely
-    old_nodata = profile.get("nodata")
-    if old_nodata is not None and old_nodata != nodata:
-        if numpy.isnan(old_nodata):
-            invalid = numpy.isnan(data)
-        else:
-            invalid = data == old_nodata
-        data = numpy.where(invalid, nodata, data)
-    profile.update(nodata=nodata)
-
-    data = data.astype(dtype, copy=False)
-    profile.update(dtype=dtype)
-
-    dst_transform = reference_profile["transform"]
-    width = reference_profile["width"]
-    height = reference_profile["height"]
-
-    profile.update(crs=reprojected_crs, height=height, transform=dst_transform, width=width)
-
-    destination = numpy.full((height, width), nodata, dtype=dtype)
-
+    destination = numpy.full((profile["height"], profile["width"]), numpy.nan, dtype=numpy.float32)
+    # without src_nodata, one nodata source cell makes the whole target cell nodata under sum and average. Without
+    # dst_nodata, target cells outside the source get 0, not nodata
     warp.reproject(
-        data,
+        source,
         destination,
         src_transform=source_profile["transform"],
         src_crs=source_profile["crs"],
-        src_nodata=nodata,
-        dst_transform=dst_transform,
-        dst_crs=reprojected_crs,
-        dst_nodata=nodata,
+        src_nodata=numpy.nan,
+        dst_transform=profile["transform"],
+        dst_crs=profile["crs"],
+        dst_nodata=numpy.nan,
         resampling=resampling_method,
     )
 
-    if scale_factor != 1.0:
-        valid: numpy.ndarray = (
-            numpy.isfinite(destination) if (nodata is None or numpy.isnan(nodata)) else (destination != nodata)
-        )
-        destination = numpy.where(valid, destination * scale_factor, destination).astype(dtype)
-
-    return save_raster(destination, profile, output_path)
+    return save_raster(destination * scale_factor, profile, output_path)
 
 
 def convert_mgd_to_mm_per_year(
     data: numpy.ndarray,
-    nodata: Any,
+    nodata: float | None,
     profile: dict[str, Any],
-    year: str,
+    year: int,
     output_path: str,
 ) -> RasterResult:
-    cell_area_m2 = abs(profile["transform"].a * profile["transform"].e)
+    """
+    Converts a raster of annual mean MGD to mm/yr over each cell, and writes it with save_raster.
 
-    is_nodata = numpy.isnan(data) if (nodata is None or numpy.isnan(nodata)) else data == nodata
-    # 1 MGD × days/yr × 3785.411784 m³/(M gal) × 1000 mm/m / cell_area_m² = mm/yr
-    conversion_factor = (366 if int(year) % 4 == 0 else 365) * 3785.411784 * 1000 / cell_area_m2
-    result = numpy.where(is_nodata, numpy.nan, data * conversion_factor).astype(numpy.float32)
+    The cell area comes from the transform. Thus the CRS must be equal-area and in metres (for example EPSG:5070).
+
+    Parameters:
+        data (numpy.ndarray): The (height, width) water use, in MGD.
+        nodata (float | None): The nodata value (see valid_mask).
+        profile (dict[str, Any]): The profile of the raster.
+        year (int): The year of the data, for the number of days.
+        output_path (str): The path to the output file.
+
+    Returns:
+        result (RasterResult): The save_raster result.
+
+    Raises:
+        ValueError: If the CRS is not projected in metres.
+    """
+
+    crs = CRS.from_user_input(profile["crs"])
+    if not crs.is_projected or crs.linear_units != "metre":
+        raise ValueError(f"MGD to mm/yr needs a projected CRS in metres, not {crs}")
+
+    cell_area_m2 = abs(profile["transform"].a * profile["transform"].e)
+    days = 366 if calendar.isleap(year) else 365
+    conversion_factor = days * CUBIC_METRES_PER_MILLION_GALLONS * MM_PER_M / cell_area_m2
+    result = numpy.where(valid_mask(data, nodata), data * conversion_factor, numpy.nan).astype(numpy.float32)
 
     return save_raster(result, profile, output_path)
 
 
-def read_raster(path: str) -> tuple[numpy.ndarray, Any, dict[str, Any]]:
+def read_raster(path: str) -> tuple[numpy.ndarray, float | None, dict[str, Any]]:
+    """
+    Reads the first band of a raster.
+
+    The return order is not the RasterResult order.
+
+    Parameters:
+        path (str): The path to the raster.
+
+    Returns:
+        data (numpy.ndarray): The band, NaN in the nodata cells.
+        nodata (float | None): The nodata value of the file.
+        profile (dict[str, Any]): The profile of the file.
+    """
+
     with rasterio.open(path) as raster:
         data = raster.read(1, masked=True).filled(numpy.nan)
         return data, raster.nodata, raster.profile
 
 
 def read_raster_profile(path: str) -> dict[str, Any]:
-    """Reads only a raster's profile (crs/transform/size/...), without loading pixel data."""
+    """
+    Reads the profile of a raster (CRS, transform, size and more), without the cell data.
+
+    Parameters:
+        path (str): The path to the raster.
+
+    Returns:
+        profile (dict[str, Any]): The profile of the file.
+    """
+
     with rasterio.open(path) as raster:
         return raster.profile
 
 
 def save_raster(arr: numpy.ndarray, profile: dict[str, Any], path: str) -> RasterResult:
+    """
+    Writes a single-band float32 GeoTIFF with NaN as nodata. Non-finite cells become NaN.
+
+    The data goes to a temporary file in the same directory, which is then renamed to path. Thus an interrupted write
+    can't leave a partial raster at path.
+
+    Parameters:
+        arr (numpy.ndarray): The (height, width) raster data.
+        profile (dict[str, Any]): The profile of the raster. This function replaces its dtype and nodata.
+        path (str): The path to the output file.
+
+    Returns:
+        result (RasterResult): The written data, the written profile and path.
+    """
+
     profile = dict(profile)
-    profile.update(dtype=rasterio.float32, nodata=numpy.nan)
+    profile.update(driver="GTiff", dtype=rasterio.float32, nodata=numpy.nan)
     out = numpy.where(numpy.isfinite(arr), arr, numpy.nan).astype(numpy.float32)
-    with rasterio.open(path, "w", **profile) as dst:
+
+    # the process ID keeps concurrent runs from sharing a temporary file
+    temporary_path = Path(f"{path}.{os.getpid()}.tmp")
+    with rasterio.open(temporary_path, "w", **profile) as dst:
         dst.write(out, 1)
+    temporary_path.replace(path)
 
     return out, profile, path
 
 
-def sum_rasters(arrays: list[numpy.ndarray], profile: dict[str, Any], output_path: str) -> RasterResult:
-    """Sum multiple rasters cell-by-cell. Cells that are nodata in all inputs stay nodata;
-    cells with at least one valid value are summed over valid inputs only."""
-    for arr in arrays:
-        if arr.shape != arrays[0].shape:
-            raise ValueError(f"Shape mismatch: expected {arrays[0].shape}, got {arr.shape}")
+def sum_rasters(rasters: Sequence[RasterResult], output_path: str) -> RasterResult:
+    """
+    Sums rasters cell by cell over their valid values, and writes the sum with save_raster.
+
+    A cell that is NaN in all inputs stays NaN.
+
+    Parameters:
+        rasters (Sequence[RasterResult]): The rasters, all on the grid of the first one.
+        output_path (str): The path to the output file.
+
+    Returns:
+        result (RasterResult): The save_raster result, with the profile of the first raster.
+
+    Raises:
+        ValueError: If a raster is not on the grid of the first one.
+    """
+
+    arrays = [data for data, _, _ in rasters]
+    _, first_profile, first_path = rasters[0]
+    for arr, profile, raster_path in rasters:
+        if arr.shape != arrays[0].shape or not profile["transform"].almost_equals(first_profile["transform"]):
+            raise ValueError(f"{raster_path} isn't on the grid of {first_path}")
 
     stack = numpy.stack(arrays)
-    result = numpy.nansum(stack, axis=0).astype(numpy.float64)
+    result = numpy.nansum(stack, axis=0)
     result[numpy.all(numpy.isnan(stack), axis=0)] = numpy.nan
 
-    raster_result = save_raster(result, profile, output_path)
+    raster_result = save_raster(result, first_profile, output_path)
     print(f"Sum raster saved → {output_path}")
     return raster_result
 
@@ -263,76 +382,55 @@ def plot_raster_map(
     cmap: Colormap,
     norm: Normalize,
     cbar_label: str,
-    basemap: bool = False,
     cbar_ticks: Sequence[float] | None = None,
     cbar_ticklabels: Sequence[str] | None = None,
 ) -> None:
-    """Render a single-band raster over a HUC boundary map and save it as a PNG.
-
-    Shared scaffold for the RWY / WRC / WRD maps: the caller supplies the
-    already-classified/normalized array plus its ``cmap`` and ``norm``; this
-    handles bounds, the outside-HUC white mask, optional basemap, HUC outlines,
-    equal aspect, and the colorbar.
     """
-    cmap.set_bad(alpha=0)  # transparent nodata
+    Plots a single-band raster with the HUC outlines and a colorbar, and saves it as a PNG.
+
+    NaN cells are transparent.
+
+    Parameters:
+        data (numpy.ndarray): The (height, width) raster data, already classified or normalized.
+        profile (dict[str, Any]): The profile of the raster.
+        hucs (geopandas.GeoDataFrame): The HUCs whose outlines to plot, in any CRS.
+        output_path (str): The path to the output PNG.
+        title (str): The map title.
+        cmap (Colormap): The colormap. The caller's colormap does not change.
+        norm (Normalize): The normalization from data to colormap.
+        cbar_label (str): The colorbar label.
+        cbar_ticks (Sequence[float] | None = None): The colorbar ticks. Matplotlib's ticks when None.
+        cbar_ticklabels (Sequence[str] | None = None): The colorbar tick labels. The tick values when None.
+    """
+
+    cmap = cmap.with_extremes(bad=(0, 0, 0, 0))
 
     height, width = data.shape
     left, bottom, right, top = transform.array_bounds(height, width, profile["transform"])
     hucs_proj = hucs.to_crs(profile["crs"])
-    huc_union = hucs_proj.geometry.union_all()
 
-    # Frame the map on the raster AND the HUC outlines: the raster is often clipped
-    # to a subset of the HUCs (e.g. upstream only), and framing on it alone cuts off
-    # the rest of the overlay. A small margin keeps edge outlines from being halved.
+    # frame the map on the raster and on the HUC outlines, because the raster often covers only some of the HUCs (for
+    # example upstream only). The margin prevents a cut through the edge outlines
     huc_left, huc_bottom, huc_right, huc_top = hucs_proj.total_bounds
     view_left, view_bottom = min(left, huc_left), min(bottom, huc_bottom)
     view_right, view_top = max(right, huc_right), max(top, huc_top)
     margin = 0.02 * max(view_right - view_left, view_top - view_bottom)
-    view_left, view_bottom = view_left - margin, view_bottom - margin
-    view_right, view_top = view_right + margin, view_top + margin
-
-    # Pad large enough to cover any axis expansion from set_aspect("equal"):
-    # worst case is (max_dim - min_dim) / 2, so 2× max_dim is always sufficient.
-    pad = max(view_right - view_left, view_top - view_bottom) * 2
-    outside_mask = shapely_box(view_left - pad, view_bottom - pad, view_right + pad, view_top + pad).difference(
-        huc_union
-    )
 
     fig, ax = plt.subplots(figsize=(10, 10))
-
-    def pin_limits() -> None:
-        # geopandas/contextily calls can auto-scale the axes to the geometry
-        # bounds; re-pin after each one to keep the full view extent.
-        ax.set_xlim(view_left, view_right)
-        ax.set_ylim(view_bottom, view_top)
-
-    pin_limits()
-    if basemap:
-        contextily.add_basemap(
-            ax,
-            crs=profile["crs"],
-            source=contextily.providers.Esri.WorldShadedRelief,
-            zorder=0,
-        )
-    else:
-        ax.set_facecolor("white")
-    pin_limits()
-
-    # aspect=None prevents geopandas from calling ax.set_aspect internally.
-    geopandas.GeoSeries([outside_mask], crs=profile["crs"]).plot(ax=ax, color="white", zorder=1, aspect=None)
-    pin_limits()
-
     img = ax.imshow(
         data.astype("float32"),
-        extent=[left, right, bottom, top],
+        extent=(left, right, bottom, top),
         origin="upper",
         cmap=cmap,
         norm=norm,
         interpolation="nearest",
         zorder=2,
     )
+    # aspect=None prevents geopandas from calling ax.set_aspect
     hucs_proj.boundary.plot(ax=ax, color="black", linewidth=0.5, zorder=3, aspect=None)
-    pin_limits()
+    # set the limits after all plot calls, because each plot call can change them
+    ax.set_xlim(view_left - margin, view_right + margin)
+    ax.set_ylim(view_bottom - margin, view_top + margin)
     ax.set_aspect("equal", adjustable="datalim")
 
     cbar = fig.colorbar(img, ax=ax, ticks=cbar_ticks)
