@@ -33,14 +33,9 @@ OUTPUT_DIRECTORY = path.join("output", "CONUS")
 
 
 def load_conus_hucs() -> geopandas.GeoDataFrame:
-    huc2s = sorted(
-        {huc2 for basin in main.CONUS_BASINS for huc2 in main.BASIN_MAPPINGS[basin][0]}
-    )
+    huc2s = sorted({huc2 for basin in main.CONUS_BASINS for huc2 in main.BASIN_MAPPINGS[basin][0]})
     hucs = pandas.concat(
-        [
-            geopandas.read_file(path.join("input", "HUC", huc2, "Shape", "WBDHU4.shp"))
-            for huc2 in huc2s
-        ]
+        [geopandas.read_file(path.join("input", "HUC", huc2, "Shape", "WBDHU4.shp")) for huc2 in huc2s]
     )
     hucs.columns = [column.lower() for column in hucs.columns]
 
@@ -90,16 +85,10 @@ def basin_paths(pattern: str) -> list[str]:
     return paths
 
 
-def final_wrd_tier_path(
-    basin: str, climate_model: str, year: int, level: int = 4
-) -> str | None:
+def final_wrd_tier_path(basin: str, climate_model: str, year: int, level: int = 4) -> str | None:
     """The highest tier-N.tif is the full composite: every unit from hop 1 to the
     outlet (see wrd_flows.run_level)."""
-    tier_paths = glob.glob(
-        path.join(
-            "output", basin, "wrd", f"huc{level}", climate_model, str(year), "tier-*.tif"
-        )
-    )
+    tier_paths = glob.glob(path.join("output", basin, "wrd", f"huc{level}", climate_model, str(year), "tier-*.tif"))
     if not tier_paths:
         print(f"  WARNING: no WRD tiers for {basin} {climate_model} {year}")
         return None
@@ -143,20 +132,14 @@ def run():
     reference_profile.update(compress="lzw")
 
     for climate_model in main.CLIMATE_MODELS:
-        rwy_directory = utilities.create_directory(
-            path.join(OUTPUT_DIRECTORY, "rwy", climate_model)
-        )
-        wrc_directory = utilities.create_directory(
-            path.join(OUTPUT_DIRECTORY, "wrc", climate_model)
-        )
+        rwy_directory = utilities.create_directory(path.join(OUTPUT_DIRECTORY, "rwy", climate_model))
+        wrc_directory = utilities.create_directory(path.join(OUTPUT_DIRECTORY, "wrc", climate_model))
 
         for year in [*main.YEARS, *(["diff"] if len(main.YEARS) > 1 else [])]:
             print(f"CONUS {climate_model} {year}")
 
             rwy = mosaic(
-                basin_paths(
-                    path.join("rwy", climate_model, f"{climate_model}_{year}_rwy.tif")
-                ),
+                basin_paths(path.join("rwy", climate_model, f"{climate_model}_{year}_rwy.tif")),
                 reference_profile,
             )
             rwy, profile, _ = utilities.save_raster(
@@ -166,18 +149,12 @@ def run():
             )
             rwy_path = path.join(rwy_directory, f"{climate_model}_{year}_rwy.png")
             if year == "diff":
-                plot_rwy(
-                    rwy, profile, hucs, rwy_path, f"RWY ({climate_model}): 2015-2020"
-                )
+                plot_rwy(rwy, profile, hucs, rwy_path, f"RWY ({climate_model}): 2015-2020")
             else:
-                main.plot_rwy_classes(
-                    rwy, profile, hucs, rwy_path, f"RWY ({climate_model}): {year}"
-                )
+                main.plot_rwy_classes(rwy, profile, hucs, rwy_path, f"RWY ({climate_model}): {year}")
 
             wrc = mosaic(
-                basin_paths(
-                    path.join("wrc", climate_model, f"{climate_model}_{year}_wrc.tif")
-                ),
+                basin_paths(path.join("wrc", climate_model, f"{climate_model}_{year}_wrc.tif")),
                 reference_profile,
             )
             wrc, profile, _ = utilities.save_raster(
@@ -240,16 +217,12 @@ def run_diffs(hucs: geopandas.GeoDataFrame) -> None:
     for climate_model in main.CLIMATE_MODELS:
         for index, cbar_label, cmap, levels in DIFF_INDICES:
             for level in levels:
-                directory = path.join(
-                    OUTPUT_DIRECTORY, index, f"huc{level}", climate_model
-                )
+                directory = path.join(OUTPUT_DIRECTORY, index, f"huc{level}", climate_model)
                 print(f"CONUS {index.upper()} huc{level} {climate_model} diff")
                 starting, _, profile = utilities.read_raster(
                     path.join(directory, f"{climate_model}_{first}_{index}.tif")
                 )
-                ending, _, _ = utilities.read_raster(
-                    path.join(directory, f"{climate_model}_{last}_{index}.tif")
-                )
+                ending, _, _ = utilities.read_raster(path.join(directory, f"{climate_model}_{last}_{index}.tif"))
                 diff, profile, _ = utilities.compute_diff(
                     starting,
                     ending,
@@ -291,13 +264,9 @@ def run_network_rwy_wrc(
         ("rwy", main.plot_rwy_classes),
         ("wrc", main.plot_wrc_classes),
     ]:
-        directory = utilities.create_directory(
-            path.join(OUTPUT_DIRECTORY, index, level_name, climate_model)
-        )
+        directory = utilities.create_directory(path.join(OUTPUT_DIRECTORY, index, level_name, climate_model))
         data = mosaic(
-            basin_paths(
-                path.join(index, level_name, climate_model, f"{climate_model}_{year}_{index}.tif")
-            ),
+            basin_paths(path.join(index, level_name, climate_model, f"{climate_model}_{year}_{index}.tif")),
             reference_profile,
         )
         data, profile, _ = utilities.save_raster(
@@ -321,9 +290,7 @@ def run_wrd(
     year: int,
     level: int,
 ) -> None:
-    wrd_directory = utilities.create_directory(
-        path.join(OUTPUT_DIRECTORY, "wrd", f"huc{level}", climate_model)
-    )
+    wrd_directory = utilities.create_directory(path.join(OUTPUT_DIRECTORY, "wrd", f"huc{level}", climate_model))
     wrd_paths = [
         tier_path
         for basin in main.CONUS_BASINS
