@@ -48,9 +48,7 @@ def unit_sums(labels: numpy.ndarray, data: numpy.ndarray, n_labels: int) -> nump
     flat_labels = labels.ravel()
     return numpy.stack(
         [
-            numpy.bincount(
-                flat_labels, weights=numpy.where(valid, data, 0.0).ravel(), minlength=n_labels
-            ),
+            numpy.bincount(flat_labels, weights=numpy.where(valid, data, 0.0).ravel(), minlength=n_labels),
             numpy.bincount(flat_labels, weights=valid.ravel().astype(float), minlength=n_labels),
         ],
         axis=1,
@@ -68,9 +66,7 @@ def descendant_means(
     nothing downstream, and where the descendants have no valid cells."""
     n_labels = len(unit_codes) + 1
     sums = numpy.concatenate([unit_sums(labels, r, n_labels) for r in rasters], axis=1)
-    totals = wrd_flows.sum_descendants(
-        graph, {code: sums[label] for label, code in enumerate(unit_codes, start=1)}
-    )
+    totals = wrd_flows.sum_descendants(graph, {code: sums[label] for label, code in enumerate(unit_codes, start=1)})
 
     means = numpy.full((n_labels, len(rasters)), numpy.nan)
     for label, code in enumerate(unit_codes, start=1):
@@ -142,9 +138,7 @@ def run(
         networks.append(
             {
                 "level": level,
-                "graph": wrd_flows.build_flow_graph(
-                    wrd_flows.load_unit_destinations(hu12s, level), level
-                ),
+                "graph": wrd_flows.build_flow_graph(wrd_flows.load_unit_destinations(hu12s, level), level),
                 "units": units,
                 "unit_codes": units["unit"].tolist(),
             }
