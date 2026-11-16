@@ -134,7 +134,7 @@ def run(
     hu12s = wrd_flows.load_hu12s(huc2s)
     networks = []
     for level in levels:
-        units = wrd_flows.load_units(huc2s, level, hu12s)
+        units = wrd_flows.load_units(hu12s, level)
         networks.append(
             {
                 "level": level,

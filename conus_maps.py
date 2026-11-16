@@ -12,7 +12,6 @@ Values aren't recomputed: each cell keeps what its own basin computed, i.e. rela
 to that basin's outlet.
 """
 
-import glob
 from os import path
 from typing import Any
 
@@ -83,19 +82,6 @@ def basin_paths(pattern: str) -> list[str]:
         else:
             print(f"  WARNING: {basin_path} missing — {basin} will be blank")
     return paths
-
-
-def final_wrd_tier_path(basin: str, climate_model: str, year: int, level: int = 4) -> str | None:
-    """The highest tier-N.tif is the full composite: every unit from hop 1 to the
-    outlet (see wrd_flows.run_level)."""
-    tier_paths = glob.glob(path.join("output", basin, "wrd", f"huc{level}", climate_model, str(year), "tier-*.tif"))
-    if not tier_paths:
-        print(f"  WARNING: no WRD tiers for {basin} {climate_model} {year}")
-        return None
-    return max(
-        tier_paths,
-        key=lambda tier_path: int(path.basename(tier_path)[len("tier-") : -len(".tif")]),
-    )
 
 
 def plot_rwy(
@@ -288,12 +274,10 @@ def run_wrd(
     level: int,
 ) -> None:
     wrd_directory = utilities.create_directory(path.join(OUTPUT_DIRECTORY, "wrd", f"huc{level}", climate_model))
-    wrd_paths = [
-        tier_path
-        for basin in main.CONUS_BASINS
-        if (tier_path := final_wrd_tier_path(basin, climate_model, year, level))
-    ]
-    wrd = mosaic(wrd_paths, reference_profile)
+    wrd = mosaic(
+        basin_paths(path.join("wrd", f"huc{level}", climate_model, f"{climate_model}_{year}_wrd.tif")),
+        reference_profile,
+    )
     wrd, profile, _ = utilities.save_raster(
         wrd,
         reference_profile,
