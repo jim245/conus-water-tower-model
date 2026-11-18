@@ -1,6 +1,6 @@
 # The hooks run the tools in .conda, so environment.yaml pins every version. Install once per clone with
 # `.conda/bin/pre-commit install`.
-exclude: ^(old|input|output)/|\.ipynb$
+exclude: ^(input|output)/
 repos:
   - repo: local
     hooks:

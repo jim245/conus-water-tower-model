@@ -1,14 +1,13 @@
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-extend-exclude = ["old", "*.ipynb"]
 
 [tool.ruff.lint]
 select = ["D100", "D101", "D102", "D103", "F", "I"]
 
 [tool.basedpyright]
 include = ["*.py"]
-exclude = ["old", ".conda", ".venv", "input", "output"]
+exclude = [".conda", "input", "output"]
 venvPath = "."
 venv = ".conda"
 reportUnnecessaryCast = "error"
@@ -29,6 +28,6 @@ paths = [
 ignore_names = ["print_flow_chains"]
 
 [tool.codespell]
-skip = "./old,./input,./output,./.conda,./.venv,*.ipynb"
+skip = "./input,./output,./.conda"
 # MOR is the Missouri Region basin
 ignore-words-list = "mor"
