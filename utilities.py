@@ -19,25 +19,26 @@ from numpy.typing import NDArray
 from rasterio import enums, io, mask, transform, warp
 from rasterio.crs import CRS
 
-RasterResult = tuple[numpy.ndarray, dict[str, Any], str]  # (data, profile, path)
+RasterResult = tuple[numpy.ndarray, dict[str, Any], Path]  # (data, profile, path)
 
 CUBIC_METRES_PER_MILLION_GALLONS = 3785.411784
 MM_PER_M = 1000
 
+WRC_MIN_DENOMINATOR = 1e-6  # mm/yr. A cell with a smaller |qi - wc| has no WRC, as in the notebook
 
-def create_directory(directory: str, exist_ok: bool = True) -> str:
+
+def create_directory(directory: Path) -> Path:
     """
-    Creates a directory and its missing parent directories.
+    Creates a directory and its missing parent directories, if they do not exist.
 
     Parameters:
-        directory (str): The directory path to create.
-        exist_ok (bool = True): Raises FileExistsError if False and the directory exists.
+        directory (Path): The directory path to create.
 
     Returns:
-        directory (str): The directory path.
+        directory (Path): The directory path.
     """
 
-    Path(directory).mkdir(parents=True, exist_ok=exist_ok)
+    directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
@@ -76,11 +77,26 @@ def compute_stats(arr: numpy.ndarray, label: str) -> dict[str, float]:
     return stats
 
 
+def print_stats(data: numpy.ndarray, label: str) -> None:
+    """
+    Prints the statistics of the finite cells (compute_stats), or a warning if no cell is finite.
+
+    Parameters:
+        data (numpy.ndarray): The raster data.
+        label (str): The name of the data, for the printed line.
+    """
+
+    if numpy.isfinite(data).any():
+        _ = compute_stats(data, label)
+    else:
+        print(f"  WARNING: {label} has no value, no statistics")
+
+
 def compute_diff(
     starting_data: numpy.ndarray,
     ending_data: numpy.ndarray,
     profile: dict[str, Any],
-    output_path: str,
+    output_path: Path,
 ) -> RasterResult:
     """
     Writes ending_data - starting_data with save_raster.
@@ -91,7 +107,7 @@ def compute_diff(
         starting_data (numpy.ndarray): The raster of the first year.
         ending_data (numpy.ndarray): The raster of the last year, on the same grid.
         profile (dict[str, Any]): The profile of the grid.
-        output_path (str): The path to the output file.
+        output_path (Path): The path to the output file.
 
     Returns:
         result (RasterResult): The save_raster result.
@@ -146,7 +162,7 @@ def clip_raster(
     data: numpy.ndarray,
     profile: dict[str, Any],
     raster_mask: geopandas.GeoSeries,
-    output_path: str,
+    output_path: Path,
 ) -> RasterResult:
     """
     Clips a raster to the mask polygons, crops it to their bounds, and writes it with save_raster.
@@ -157,7 +173,7 @@ def clip_raster(
         data (numpy.ndarray): The (height, width) raster data.
         profile (dict[str, Any]): The profile of the raster.
         raster_mask (geopandas.GeoSeries): The polygons to clip to, in any CRS.
-        output_path (str): The path to the output file.
+        output_path (Path): The path to the output file.
 
     Returns:
         result (RasterResult): The save_raster result.
@@ -185,7 +201,7 @@ def reproject_raster(
     data: numpy.ndarray,
     source_profile: dict[str, Any],
     reference_profile: dict[str, Any],
-    output_path: str,
+    output_path: Path,
     *,
     resampling_method: enums.Resampling,
     scale_factor: float = 1.0,
@@ -199,7 +215,7 @@ def reproject_raster(
         data (numpy.ndarray): The (height, width) raster data.
         source_profile (dict[str, Any]): The profile of the raster.
         reference_profile (dict[str, Any]): The profile whose CRS, transform and size the output gets.
-        output_path (str): The path to the output file.
+        output_path (Path): The path to the output file.
         resampling_method (enums.Resampling): The resampling method. Use sum for a total per cell, and average for a
             value per area.
         scale_factor (float = 1.0): The factor for each output cell, for example for a unit conversion.
@@ -243,7 +259,7 @@ def convert_mgd_to_mm_per_year(
     nodata: float | None,
     profile: dict[str, Any],
     year: int,
-    output_path: str,
+    output_path: Path,
 ) -> RasterResult:
     """
     Converts a raster of annual mean MGD to mm/yr over each cell, and writes it with save_raster.
@@ -255,7 +271,7 @@ def convert_mgd_to_mm_per_year(
         nodata (float | None): The nodata value (see valid_mask).
         profile (dict[str, Any]): The profile of the raster.
         year (int): The year of the data, for the number of days.
-        output_path (str): The path to the output file.
+        output_path (Path): The path to the output file.
 
     Returns:
         result (RasterResult): The save_raster result.
@@ -276,14 +292,14 @@ def convert_mgd_to_mm_per_year(
     return save_raster(result, profile, output_path)
 
 
-def read_raster(path: str) -> tuple[numpy.ndarray, float | None, dict[str, Any]]:
+def read_raster(path: Path) -> tuple[numpy.ndarray, float | None, dict[str, Any]]:
     """
     Reads the first band of a raster.
 
     The return order is not the RasterResult order.
 
     Parameters:
-        path (str): The path to the raster.
+        path (Path): The path to the raster.
 
     Returns:
         data (numpy.ndarray): The band, NaN in the nodata cells.
@@ -296,12 +312,12 @@ def read_raster(path: str) -> tuple[numpy.ndarray, float | None, dict[str, Any]]
         return data, raster.nodata, raster.profile
 
 
-def read_raster_profile(path: str) -> dict[str, Any]:
+def read_raster_profile(path: Path) -> dict[str, Any]:
     """
     Reads the profile of a raster (CRS, transform, size and more), without the cell data.
 
     Parameters:
-        path (str): The path to the raster.
+        path (Path): The path to the raster.
 
     Returns:
         profile (dict[str, Any]): The profile of the file.
@@ -311,7 +327,7 @@ def read_raster_profile(path: str) -> dict[str, Any]:
         return raster.profile
 
 
-def save_raster(arr: numpy.ndarray, profile: dict[str, Any], path: str) -> RasterResult:
+def save_raster(arr: numpy.ndarray, profile: dict[str, Any], path: Path) -> RasterResult:
     """
     Writes a single-band float32 GeoTIFF with NaN as nodata. Non-finite cells become NaN.
 
@@ -321,7 +337,7 @@ def save_raster(arr: numpy.ndarray, profile: dict[str, Any], path: str) -> Raste
     Parameters:
         arr (numpy.ndarray): The (height, width) raster data.
         profile (dict[str, Any]): The profile of the raster. This function replaces its dtype and nodata.
-        path (str): The path to the output file.
+        path (Path): The path to the output file.
 
     Returns:
         result (RasterResult): The written data, the written profile and path.
@@ -340,7 +356,7 @@ def save_raster(arr: numpy.ndarray, profile: dict[str, Any], path: str) -> Raste
     return out, profile, path
 
 
-def sum_rasters(rasters: Sequence[RasterResult], output_path: str) -> RasterResult:
+def sum_rasters(rasters: Sequence[RasterResult], output_path: Path) -> RasterResult:
     """
     Sums rasters cell by cell over their valid values, and writes the sum with save_raster.
 
@@ -348,7 +364,7 @@ def sum_rasters(rasters: Sequence[RasterResult], output_path: str) -> RasterResu
 
     Parameters:
         rasters (Sequence[RasterResult]): The rasters, all on the grid of the first one.
-        output_path (str): The path to the output file.
+        output_path (Path): The path to the output file.
 
     Returns:
         result (RasterResult): The save_raster result, with the profile of the first raster.
@@ -376,7 +392,7 @@ def plot_raster_map(
     data: numpy.ndarray,
     profile: dict[str, Any],
     hucs: geopandas.GeoDataFrame,
-    output_path: str,
+    output_path: Path,
     *,
     title: str,
     cmap: Colormap,
@@ -394,7 +410,7 @@ def plot_raster_map(
         data (numpy.ndarray): The (height, width) raster data, already classified or normalized.
         profile (dict[str, Any]): The profile of the raster.
         hucs (geopandas.GeoDataFrame): The HUCs whose outlines to plot, in any CRS.
-        output_path (str): The path to the output PNG.
+        output_path (Path): The path to the output PNG.
         title (str): The map title.
         cmap (Colormap): The colormap. The caller's colormap does not change.
         norm (Normalize): The normalization from data to colormap.

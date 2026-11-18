@@ -1,17 +1,48 @@
-from os import path
-from typing import Any
+"""
+Computes RWY (Runoff Water Yield), WRC (Water Resource Contribution) and WRD (Water Resource Dependency) for each basin
+of CONUS_BASINS. The scenarios are CLIMATE_MODELS and the years are YEARS.
+
+RWY and WRC compare each upstream cell of a basin with one downstream outlet region D (BASIN_MAPPINGS):
+
+    RWY_cell = q_cell / mean(q over D)
+    WRC_cell = (mean(Q over D) - mean(WW over D)) / (qi_cell - wc_cell)
+
+    q      = the mean Quickflow over the GCMs, on the Quickflow grid
+    Q, qi  = the same Quickflow in mm/yr, on the 1 km water-use grid
+    WW     = the surface-water public-supply withdrawal (pws-sw), in mm/yr
+    wc     = the consumption (irrigation, pws-cu and thermoelectric), in mm/yr
+
+The means are over the finite, non-negative cells (utilities.safe_mean). WW has no 0.75 factor: the notebook WRC uses
+it for the Potomac study only.
+
+For each basin, WRD (wrd_flows.run_year) and RWY and WRC at each network level (network_indices.run_year) follow.
+Writes output/<basin>/. Run conus_maps.py after this module for the CONUS maps.
+"""
+
+import os
+
+# conda activation sets PROJ_NETWORK=ON. PROJ can then download grid shifts, and a transformation then depends on the
+# network access and on PROJ's grid cache. Set it before the imports that load PROJ
+os.environ["PROJ_NETWORK"] = "OFF"
+
+# isort: split
+
+from pathlib import Path
 
 import geopandas
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy
-import pandas
 
+import index_maps
+import network_indices
 import raster_preparation
 import utilities
 import wrd_flows
 
-# TODO: switch total water use to surface only
+# basin: (huc2s, huc4s excluded from the upstream area, huc4s of the downstream outlet region). A huc4 that is not in
+# the flow network of the basin goes in the excluded list and not in the outlet region (0807 and 0808 in the MRB, 1508
+# in the CRB)
 BASIN_MAPPINGS = {
     "NER": (
         ["01"],
@@ -60,16 +91,11 @@ BASIN_MAPPINGS = {
             "0318",
         ],
     ),  # South Atlantic-Gulf Region
-    "GLR": (["04"], ["0415"], ["0415"]),  # Great Lakes Region
+    "GLR": (["04"], ["0429", "0430", "0431"], ["0429", "0430", "0431"]),  # Great Lakes Region
     "OHR": (["05"], ["0514"], ["0514"]),  # Ohio Region
     "TNR": (["06"], ["0604"], ["0604"]),  # Tennessee Region
     "UMR": (["07"], ["0714"], ["0714"]),  # Upper Mississippi Region
     "LMR": (["08"], ["0809"], ["0809"]),  # Lower Mississippi Region
-    # "SRR": (
-    #     ["09"],
-    #     ["0901", "0902", "0903", "0904"],
-    #     ["0901", "0902", "0903", "0904"],
-    # ),  # Souris-Red-Rainy Region
     "MOR": (["10"], ["1030"], ["1030"]),  # Missouri Region
     "AWR": (
         ["11"],
@@ -105,28 +131,11 @@ BASIN_MAPPINGS = {
         ["1801", "1803", "1805", "1806", "1807", "1808", "1809", "1810"],
         ["1801", "1803", "1805", "1806", "1807", "1808", "1809", "1810"],
     ),  # California Region
-    # "AKR": (
-    #     ["19"],
-    #     ["1901", "1902", "1903", "1905", "1906", "1909"],
-    #     ["1901", "1902", "1903", "1905", "1906", "1909"],
-    # ),  # Alaska Region
-    # "HIR": (
-    #     ["20"],
-    #     ["2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008"],
-    #     ["2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008"],
-    # ),  # Hawaii Region
-    # "CRR": (["21"], ["2101", "2102"], ["2101", "2102"]),  # Caribbean Region
-    # "SPR": (
-    #     ["22"],
-    #     ["2201", "2202", "2203"],
-    #     ["2201", "2202", "2203"],
-    # ),  # South Pacific Region
 }
 
-# Non-overlapping set of BASIN_MAPPINGS keys that tiles CONUS: the Mississippi and
-# Colorado are run as whole river systems (MRB, CRB) rather than their HUC2 regions,
-# so every cell is evaluated against its real outlet. SRR (09) is commented out above,
-# so it's a gap in the mosaic.
+# the basins of the CONUS mosaic, with no overlap. The Mississippi and the Colorado are whole river systems (MRB, CRB),
+# not their huc2 regions, so that each cell has its real outlet. huc2 09 (Souris-Red-Rainy) is in no basin and is a gap
+# in the mosaic
 CONUS_BASINS = [
     "NER",
     "MAR",
@@ -142,76 +151,35 @@ CONUS_BASINS = [
 ]
 
 CLIMATE_MODELS = ["SSP245", "SSP370"]
-YEARS = list(range(2015, 2020 + 1))  # diffs (first vs last year) need 2+ years
-
-
-RWY_BOUNDARIES = [0, 0.5, 1, 2, 3, 5, 10]
-RWY_COLORS = [
-    "lightgray",  # = 0
-    "#f5d300",  # 0 to 0.5: yellow
-    "#fff3a0",  # 0.5 to 1: lighter yellow
-    "#f9b4c8",  # 1 to 2: pink
-    "#e7609a",  # 2 to 3: dark pink
-    "#e31a1c",  # 3 to 5: red
-    "#b10026",  # 5 to 10: darker red
-    "#67000d",  # > 10: dark red
-]
-RWY_LABELS = [
-    "0",
-    "0 to 0.5",
-    "0.5 to 1",
-    "1 to 2",
-    "2 to 3",
-    "3 to 5",
-    "5 to 10",
-    "> 10",
-]
-
-
-def plot_rwy_classes(
-    rwy: numpy.ndarray,
-    profile: dict[str, Any],
-    hucs: geopandas.GeoDataFrame,
-    output_path: str,
-    title: str,
-):
-    # Upper-inclusive bins (0 < RWY <= 0.5, ...), plus a class of its own for 0:
-    # cells with no quickflow at all, common across the desert Southwest.
-    rwy_classes = numpy.full(rwy.shape, numpy.nan, dtype="float32")
-    rwy_classes[rwy <= 0] = 0
-    for i, (low, high) in enumerate(zip(RWY_BOUNDARIES, RWY_BOUNDARIES[1:])):
-        rwy_classes[(rwy > low) & (rwy <= high)] = i + 1
-    rwy_classes[rwy > RWY_BOUNDARIES[-1]] = len(RWY_BOUNDARIES)
-
-    counts = {label: int(numpy.sum(rwy_classes == i)) for i, label in enumerate(RWY_LABELS)}
-    print(f"  RWY category counts: {counts}")
-
-    n_classes = len(RWY_COLORS)
-    utilities.plot_raster_map(
-        rwy_classes,
-        profile,
-        hucs,
-        output_path,
-        title=title,
-        cmap=mcolors.ListedColormap(RWY_COLORS),
-        norm=mcolors.BoundaryNorm(boundaries=numpy.arange(n_classes + 1) - 0.5, ncolors=n_classes),
-        cbar_label="Runoff Water Yield (RWY)",
-        cbar_ticks=list(range(n_classes)),
-        cbar_ticklabels=RWY_LABELS,
-    )
+YEARS = list(range(2015, 2020 + 1))  # the diff maps (first and last year) need 2 or more years
 
 
 def run_rwy(
     upstream_hucs: geopandas.GeoDataFrame,
     downstream_hucs: geopandas.GeoDataFrame,
     basin_hucs: geopandas.GeoDataFrame,
-    root_output_directory: str,
-):
+    root_output_directory: Path,
+) -> None:
+    """
+    Computes the RWY of each upstream cell for each scenario and year, and the diff of the first and the last year.
+
+    The RWY has no value in all cells if the mean downstream Quickflow is not positive: then the function prints a
+    warning. The color scale of the diff map is from the 2nd to the 98th percentile. Prints the statistics of each
+    year.
+
+    Writes rwy/<scenario>/<scenario>_<year>_rwy.tif and .png, and <scenario>_diff_rwy.tif and .png, under
+    root_output_directory (and the steps of raster_preparation.prepare_quickflow_rasters).
+
+    Parameters:
+        upstream_hucs (geopandas.GeoDataFrame): The huc4 polygons of the upstream area.
+        downstream_hucs (geopandas.GeoDataFrame): The huc4 polygons of the downstream outlet region.
+        basin_hucs (geopandas.GeoDataFrame): The huc4 polygons of the basin, for the map outlines.
+        root_output_directory (Path): The output directory of the basin.
+    """
+
     for climate_model in CLIMATE_MODELS:
         result_arrays = list[numpy.ndarray]()
-        output_directory = utilities.create_directory(
-            path.join(root_output_directory, "rwy", climate_model), exist_ok=True
-        )
+        output_directory = utilities.create_directory(Path(root_output_directory, "rwy", climate_model))
 
         profile = None
         for year in YEARS:
@@ -231,23 +199,27 @@ def run_rwy(
             if downstream_average > 0:
                 valid_upstream = numpy.isfinite(upstream_data)
                 rwy[valid_upstream] = upstream_data[valid_upstream] / downstream_average
+            else:
+                print(
+                    f"  WARNING: RWY ({climate_model}, {year}): the mean downstream Quickflow is {downstream_average}, "
+                    "not positive. The RWY has no value"
+                )
 
             rwy, profile, _ = utilities.save_raster(
                 rwy,
                 profile,
-                path.join(output_directory, f"{climate_model}_{year}_rwy.tif"),
+                Path(output_directory, f"{climate_model}_{year}_rwy.tif"),
             )
             result_arrays.append(rwy)
+            utilities.print_stats(rwy, f"RWY ({climate_model}, {year})")
 
-            plot_rwy_classes(
+            index_maps.plot_rwy_classes(
                 rwy,
                 profile,
                 basin_hucs,
-                path.join(output_directory, f"{climate_model}_{year}_rwy.png"),
+                Path(output_directory, f"{climate_model}_{year}_rwy.png"),
                 title=f"RWY ({climate_model}): {year}",
             )
-
-            # TODO: stats and histogram
 
         assert profile is not None
 
@@ -258,81 +230,56 @@ def run_rwy(
             result_arrays[0],
             result_arrays[-1],
             profile,
-            path.join(output_directory, f"{climate_model}_diff_rwy.tif"),
+            Path(output_directory, f"{climate_model}_diff_rwy.tif"),
         )
 
         finite = diff[numpy.isfinite(diff)]
+        if finite.size == 0:
+            print(f"  WARNING: RWY diff ({climate_model}) has no value, no diff map")
+            continue
         vmin, vmax = numpy.nanpercentile(finite, [2, 98])
 
         utilities.plot_raster_map(
             diff,
             profile,
             basin_hucs,
-            path.join(output_directory, f"{climate_model}_diff_rwy.png"),
-            title=f"RWY ({climate_model}): 2015-2020",
+            Path(output_directory, f"{climate_model}_diff_rwy.png"),
+            title=f"RWY ({climate_model}): {YEARS[0]}-{YEARS[-1]}",
             cmap=plt.get_cmap("YlOrRd").copy(),
             norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
             cbar_label="Runoff Water Yield (RWY)",
         )
 
 
-def plot_wrc_classes(
-    wrc: numpy.ndarray,
-    profile: dict[str, Any],
-    hucs: geopandas.GeoDataFrame,
-    output_path: str,
-    title: str,
-):
-    # Classify into the same 4 bins as the original pipeline's plot_wrc:
-    # magnitude within a bin doesn't matter, only which side of these
-    # thresholds a cell falls on.
-    wrc_classes = numpy.full(wrc.shape, numpy.nan, dtype="float32")
-    wrc_classes[wrc <= -1] = 0
-    wrc_classes[(wrc > -1) & (wrc < 0)] = 1
-    wrc_classes[(wrc >= 0) & (wrc <= 1)] = 2
-    wrc_classes[wrc > 1] = 3
-
-    print(
-        "  WRC category counts: "
-        f"{{'≤ -1': {int(numpy.sum(wrc <= -1))}, "
-        f"'-1 to 0': {int(numpy.sum((wrc > -1) & (wrc < 0)))}, "
-        f"'0 to 1': {int(numpy.sum((wrc >= 0) & (wrc <= 1)))}, "
-        f"'> 1': {int(numpy.sum(wrc > 1))}}}"
-    )
-
-    wrc_cmap = mcolors.ListedColormap(["orange", "yellow", "green", "lightblue"])
-    wrc_norm = mcolors.BoundaryNorm(boundaries=[-0.5, 0.5, 1.5, 2.5, 3.5], ncolors=4)
-
-    utilities.plot_raster_map(
-        wrc_classes,
-        profile,
-        hucs,
-        output_path,
-        title=title,
-        cmap=wrc_cmap,
-        norm=wrc_norm,
-        cbar_label="Water Resource Contribution (WRC)",
-        cbar_ticks=[0, 1, 2, 3],
-        cbar_ticklabels=["≤ -1", "-1 to 0", "0 to 1", "> 1"],
-    )
-
-
 def run_wrc(
     upstream_hucs: geopandas.GeoDataFrame,
     downstream_hucs: geopandas.GeoDataFrame,
     basin_hucs: geopandas.GeoDataFrame,
-    root_output_directory: str,
-):
+    root_output_directory: Path,
+) -> None:
+    """
+    Computes the WRC of each upstream cell for each scenario and year, and the diff of the first and the last year.
+
+    The runoff depends on the scenario. The water use does not. Inside the runoff area, a water-use cell with no value
+    counts as 0 (raster_preparation.prepare_pws_withdrawal_raster). The color scale of the diff map is from the 2nd to
+    the 98th percentile. Prints the statistics of each year.
+
+    Writes wrc/<scenario>/<scenario>_<year>_wrc.tif and .png, <scenario>_diff_wrc.tif and .png, and
+    <year>-consumption_total.tif under root_output_directory (and the steps of the raster_preparation functions).
+
+    Parameters:
+        upstream_hucs (geopandas.GeoDataFrame): The huc4 polygons of the upstream area.
+        downstream_hucs (geopandas.GeoDataFrame): The huc4 polygons of the downstream outlet region.
+        basin_hucs (geopandas.GeoDataFrame): The huc4 polygons of the basin, for the map outlines.
+        root_output_directory (Path): The output directory of the basin.
+    """
+
     for climate_model in CLIMATE_MODELS:
         result_arrays = list[numpy.ndarray]()
-        output_directory = utilities.create_directory(
-            path.join(root_output_directory, "wrc", climate_model), exist_ok=True
-        )
+        output_directory = utilities.create_directory(Path(root_output_directory, "wrc", climate_model))
 
         profile = None
         for year in YEARS:
-            # Runoff is the GCM-averaged quickflow for this scenario/year (the same
-            # source RWY uses); water use doesn't depend on the climate model.
             upstream_runoff, downstream_runoff = raster_preparation.prepare_runoff_rasters(
                 upstream_hucs,
                 downstream_hucs,
@@ -357,41 +304,34 @@ def run_wrc(
 
             consumption_sum = utilities.sum_rasters(
                 [irr, upstream_pws, thermoelectric],
-                path.join(root_output_directory, f"{year}-consumption_total.tif"),
+                Path(root_output_directory, f"{year}-consumption_total.tif"),
             )
 
-            # compute wrc
             qi, qi_profile = upstream_runoff[:2]
             wc, wc_profile = consumption_sum[:2]
             qd, qd_profile = downstream_runoff[:2]
             ww, ww_profile = downstream_pws[:2]
 
-            # Water-use rasters are NaN wherever there's no use, which means zero, not
-            # missing data. Fill them with 0 inside the runoff footprint so WW is
-            # averaged over the same cells as Q, and wc doesn't mask out cells.
             ww = numpy.where(numpy.isfinite(qd) & numpy.isnan(ww), 0.0, ww)
             wc = numpy.where(numpy.isfinite(qi) & numpy.isnan(wc), 0.0, wc)
 
-            Q_downstream_avg = utilities.safe_mean(qd, qd_profile["nodata"])
-            WW_downstream_avg = utilities.safe_mean(ww, ww_profile["nodata"])
+            runoff_mean = utilities.safe_mean(qd, qd_profile["nodata"])
+            withdrawal_mean = utilities.safe_mean(ww, ww_profile["nodata"])
 
-            scalar_numer = Q_downstream_avg - WW_downstream_avg
+            numerator = runoff_mean - withdrawal_mean
 
             denominator = qi - wc
-            denominator[numpy.abs(denominator) < 1e-6] = numpy.nan
+            denominator[numpy.abs(denominator) < utilities.WRC_MIN_DENOMINATOR] = numpy.nan
 
-            wrc = scalar_numer / denominator
+            wrc = numerator / denominator
 
             print(f"  WRC ({climate_model}, {year}):")
-            print(f"  Q_downstream_avg:  {Q_downstream_avg:.3f} mm/yr")
-            print(f"  WW_downstream_avg: {WW_downstream_avg:.3f} mm/yr")
-            print(f"  Scalar numerator:  {scalar_numer:.3f} mm/yr")
+            print(f"  Q_downstream_avg:  {runoff_mean:.3f} mm/yr")
+            print(f"  WW_downstream_avg: {withdrawal_mean:.3f} mm/yr")
+            print(f"  Scalar numerator:  {numerator:.3f} mm/yr")
             print(f"  Denominator range: {numpy.nanmin(denominator):.3f} to {numpy.nanmax(denominator):.3f} mm/yr")
-            print(
-                f"  WRC range (pre-mask): {numpy.nanmin(wrc):.3f} to {numpy.nanmax(wrc):.3f}"
-            )  # CRB values are naturally extreme due to insufficient river contribution
+            print(f"  WRC range (pre-mask): {numpy.nanmin(wrc):.3f} to {numpy.nanmax(wrc):.3f}")
 
-            # Mask nodata cells
             nodata_mask = ~utilities.valid_mask(qi, qi_profile["nodata"]) | ~utilities.valid_mask(
                 wc, wc_profile["nodata"]
             )
@@ -401,19 +341,18 @@ def run_wrc(
             wrc, profile, _ = utilities.save_raster(
                 wrc,
                 qi_profile,
-                path.join(output_directory, f"{climate_model}_{year}_wrc.tif"),
+                Path(output_directory, f"{climate_model}_{year}_wrc.tif"),
             )
             result_arrays.append(wrc)
+            utilities.print_stats(wrc, f"WRC ({climate_model}, {year})")
 
-            plot_wrc_classes(
+            index_maps.plot_wrc_classes(
                 wrc,
                 profile,
                 basin_hucs,
-                path.join(output_directory, f"{climate_model}_{year}_wrc.png"),
+                Path(output_directory, f"{climate_model}_{year}_wrc.png"),
                 title=f"WRC ({climate_model}): {year}",
             )
-
-            # TODO: stats and histogram
 
         assert profile is not None
 
@@ -424,55 +363,70 @@ def run_wrc(
             result_arrays[0],
             result_arrays[-1],
             profile,
-            path.join(output_directory, f"{climate_model}_diff_wrc.tif"),
+            Path(output_directory, f"{climate_model}_diff_wrc.tif"),
         )
 
         finite = diff[numpy.isfinite(diff)]
+        if finite.size == 0:
+            print(f"  WARNING: WRC diff ({climate_model}) has no value, no diff map")
+            continue
         vmin, vmax = numpy.nanpercentile(finite, [2, 98])
 
         utilities.plot_raster_map(
             diff,
             profile,
             basin_hucs,
-            path.join(output_directory, f"{climate_model}_diff_wrc.png"),
-            title=f"WRC ({climate_model}): 2015-2020",
+            Path(output_directory, f"{climate_model}_diff_wrc.png"),
+            title=f"WRC ({climate_model}): {YEARS[0]}-{YEARS[-1]}",
             cmap=plt.get_cmap("viridis").copy(),
             norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
             cbar_label="Water Resource Contribution (WRC)",
         )
 
 
-def main():
-    for basin, (
-        basin_huc2s,
-        excluded_upstream_huc4s,
-        included_downstream_huc4s,
-    ) in BASIN_MAPPINGS.items():
-        if basin not in CONUS_BASINS:
-            continue
+def main() -> None:
+    """
+    Computes and writes RWY, WRC, WRD and the network RWY and WRC of each basin of CONUS_BASINS, in output/<basin>/.
 
-        basin_hucs = pandas.concat(
-            [geopandas.read_file(path.join("input", "HUC", huc2, "Shape", "WBDHU4.shp")) for huc2 in basin_huc2s]
-        )
-        basin_hucs.columns = [column.lower() for column in basin_hucs.columns]
+    First computes the national rasters (raster_preparation.prepare_national_rasters), one time for all basins. The huc4
+    polygons are the GDB huc12s dissolved by code (wrd_flows.load_units): the polygons of the flow network. For each
+    basin, builds the networks one time. Prepares the water use one time for each year, and the runoff one time for
+    each scenario and year. The WRD and the network RWY and WRC use the same networks and rasters.
 
-        upstream_hucs = basin_hucs[~basin_hucs["huc4"].isin(excluded_upstream_huc4s)]
-        downstream_hucs = basin_hucs[basin_hucs["huc4"].isin(included_downstream_huc4s)]
+    Raises:
+        ValueError: If a huc4 of BASIN_MAPPINGS is not a huc4 of the basin in the GDB.
+    """
 
-        output_directory = utilities.create_directory(path.join("output", basin), exist_ok=True)
+    raster_preparation.prepare_national_rasters(CLIMATE_MODELS, YEARS)
 
-        run_rwy(
-            upstream_hucs,
-            downstream_hucs,
-            basin_hucs,
-            output_directory,
-        )
+    for basin in CONUS_BASINS:
+        huc2s, excluded_upstream_huc4s, downstream_huc4s = BASIN_MAPPINGS[basin]
 
+        huc12s = wrd_flows.load_huc12s(huc2s)
+        units = {level: wrd_flows.load_units(huc12s, level) for level in wrd_flows.LEVELS}
+        basin_hucs = units[4]
+
+        unknown_huc4s = sorted(set(excluded_upstream_huc4s + downstream_huc4s) - set(basin_hucs["unit"]))
+        if unknown_huc4s:
+            raise ValueError(
+                f"{basin}: the huc4s {unknown_huc4s} of BASIN_MAPPINGS are not huc4s of the basin in the GDB"
+            )
+
+        upstream_hucs = basin_hucs[~basin_hucs["unit"].isin(excluded_upstream_huc4s)]
+        downstream_hucs = basin_hucs[basin_hucs["unit"].isin(downstream_huc4s)]
+
+        output_directory = utilities.create_directory(Path("output", basin))
+
+        run_rwy(upstream_hucs, downstream_hucs, basin_hucs, output_directory)
         run_wrc(upstream_hucs, downstream_hucs, basin_hucs, output_directory)
 
-        #  Acknowledge limitation/improvement of proportional allocation from diverging HUC flows
-        #  Acknowledge limitation: inter-basin transfers aren't modeled (see wrd_flows docstring)
-        wrd_flows.run(basin_huc2s, basin_hucs, CLIMATE_MODELS, YEARS, output_directory)
+        networks = [wrd_flows.build_level(huc12s, units[level], level) for level in wrd_flows.LEVELS]
+        for year in YEARS:
+            water_use = wrd_flows.prepare_water_use(basin_hucs, year, output_directory)
+            for climate_model in CLIMATE_MODELS:
+                rasters = wrd_flows.prepare_basin_rasters(basin_hucs, climate_model, year, output_directory, water_use)
+                wrd_flows.run_year(basin_hucs, climate_model, year, output_directory, networks, rasters)
+                network_indices.run_year(basin_hucs, climate_model, year, output_directory, networks, rasters)
 
 
 if __name__ == "__main__":

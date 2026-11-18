@@ -1,49 +1,48 @@
 """
-RWY (Runoff Water Yield) and WRC (Water Resource Contribution) on the huc4, huc8 and
-huc12 routing networks (LEVELS) — the downstream mirror of wrd_flows' WRD.
+Computes RWY (Runoff Water Yield) and WRC (Water Resource Contribution) for each hydrologic unit of a basin, at the
+huc4, huc8 and huc12 levels.
 
-main.py's RWY/WRC split each basin once: every upstream cell against one scalar
-averaged over a hand-picked downstream outlet region (e.g. huc4 1503 for the CRB).
-Here each unit A gets its own downstream region instead: every unit its water passes
-through on the way to its outlet (its descendants, wrd_flows.sum_descendants), found
-from NHDPlus's HU12 tohuc routing (wrd_flows.build_flow_graph, ARTIFACT_EDGES
-included). WRD pools over a unit's ancestors (what feeds it); RWY/WRC pool over its
-descendants (what it feeds):
+main.py compares each upstream cell of a basin with one downstream outlet region. This module compares each cell with
+the descendants D_A of its unit A: all the units downstream of A in the flow graph (wrd_flows.build_flow_graph,
+wrd_flows.sum_descendants). WRD (wrd_flows.py) uses the ancestors of a unit. RWY and WRC use its descendants:
 
     RWY_cell = q_cell / mean(q over D_A)
     WRC_cell = (mean(Q over D_A) - mean(WW over D_A)) / (qi_cell - wc_cell)
 
-    D_A = every unit downstream of the cell's unit A
-    q   = GCM-averaged quickflow on its native 800 m grid (as main.run_rwy)
-    Q   = the same quickflow as mm/yr on the 1 km water-use grid (as main.run_wrc)
-    WW  = pws-sw withdrawal; qi, wc = the cell's runoff and consumption
-          (irr + pws-cu + thermoelectric), exactly main.run_wrc's inputs
+    q, Q, qi, WW, wc = the inputs of main.run_rwy and main.run_wrc, clipped to the basin
 
-Means over D_A pool every cell of every descendant (main.py's safe_mean semantics:
-finite, non-negative cells), not a mean of per-unit means. Units with nothing
-downstream (outlets and closed-basin sinks) are left blank. There are no
-hand-picked exclusions (e.g. the CRB's 1508): the routing decides.
+A mean over D_A is the mean of all the cells of all the descendants, not a mean of the unit means. The cells are the
+cells of utilities.safe_mean. A unit without descendants (an outlet or a closed-basin sink) gets no RWY and no WRC.
+The flow graph gives the descendants, with no exclusion by hand.
 
-Not called from main.main, since this module uses main's plotting; run it per basin
-alongside wrd_flows.run, then conus_maps.run_network_rwy_wrc for the mosaic.
+main.main calls run_year for each basin, scenario and year. conus_maps.run_network_rwy_wrc makes the CONUS maps.
 """
 
-from os import path
+from pathlib import Path
+from typing import Any
 
 import geopandas
 import numpy
 
-import main
+import index_maps
 import raster_preparation
 import utilities
 import wrd_flows
 
-LEVELS = (4, 8, 12)
-
 
 def unit_sums(labels: numpy.ndarray, data: numpy.ndarray, n_labels: int) -> numpy.ndarray:
-    """(sum, count) of finite, non-negative cells per label — utilities.safe_mean's
-    cells — as an (n_labels, 2) array."""
+    """
+    Sums the valid cells of each label, and counts them. A valid cell is a cell of utilities.safe_mean.
+
+    Parameters:
+        labels (numpy.ndarray): The unit labels (wrd_flows.rasterize_units).
+        data (numpy.ndarray): The raster data, on the grid of labels.
+        n_labels (int): The number of labels, with label 0.
+
+    Returns:
+        sums (numpy.ndarray): An (n_labels, 2) array: the sum and the count of each label.
+    """
+
     valid = numpy.isfinite(data) & (data >= 0)
     flat_labels = labels.ravel()
     return numpy.stack(
@@ -61,9 +60,20 @@ def descendant_means(
     labels: numpy.ndarray,
     rasters: list[numpy.ndarray],
 ) -> numpy.ndarray:
-    """Per label (row) and raster (column): the raster's mean over every cell of every
-    unit downstream of that label's unit. NaN for label 0 (no unit), for units with
-    nothing downstream, and where the descendants have no valid cells."""
+    """
+    Computes the mean of each raster over the descendants of each unit.
+
+    Parameters:
+        graph (dict[str, list[str]]): The flow graph (wrd_flows.build_flow_graph).
+        unit_codes (list[str]): The unit code of each label, from label 1.
+        labels (numpy.ndarray): The unit labels (wrd_flows.rasterize_units).
+        rasters (list[numpy.ndarray]): The raster data, on the grid of labels.
+
+    Returns:
+        means (numpy.ndarray): An (n_labels, len(rasters)) array. NaN for label 0 (no unit), for a unit without
+            descendants and where the descendants have no valid cell.
+    """
+
     n_labels = len(unit_codes) + 1
     sums = numpy.concatenate([unit_sums(labels, r, n_labels) for r in rasters], axis=1)
     totals = wrd_flows.sum_descendants(graph, {code: sums[label] for label, code in enumerate(unit_codes, start=1)})
@@ -85,6 +95,19 @@ def compute_rwy(
     unit_codes: list[str],
     graph: dict[str, list[str]],
 ) -> numpy.ndarray:
+    """
+    Computes the RWY of each cell against the descendants of its unit (see the module docstring).
+
+    Parameters:
+        quickflow (numpy.ndarray): The mean Quickflow, float64, NaN for no data.
+        labels (numpy.ndarray): The unit labels on the Quickflow grid (wrd_flows.rasterize_units).
+        unit_codes (list[str]): The unit code of each label, from label 1.
+        graph (dict[str, list[str]]): The flow graph (wrd_flows.build_flow_graph).
+
+    Returns:
+        rwy (numpy.ndarray): The RWY of each cell, float64. NaN where the mean over the descendants is not positive.
+    """
+
     downstream_average = descendant_means(graph, unit_codes, labels, [quickflow])[:, 0][labels]
 
     rwy = numpy.full(quickflow.shape, numpy.nan, dtype="float64")
@@ -101,9 +124,25 @@ def compute_wrc(
     unit_codes: list[str],
     graph: dict[str, list[str]],
 ) -> numpy.ndarray:
-    # Water-use rasters are NaN wherever there's no use, which means zero, not
-    # missing data. Fill them with 0 inside the runoff footprint so WW is averaged
-    # over the same cells as Q, and wc doesn't mask out cells.
+    """
+    Computes the WRC of each cell against the descendants of its unit (see the module docstring).
+
+    Inside the runoff area, a water-use cell with no value counts as 0
+    (raster_preparation.prepare_pws_withdrawal_raster).
+
+    Parameters:
+        runoff (numpy.ndarray): The runoff, in mm/yr, NaN for no data.
+        consumption (numpy.ndarray): The consumption, in mm/yr, NaN for no data, on the same grid.
+        withdrawal (numpy.ndarray): The withdrawal, in mm/yr, NaN for no data, on the same grid.
+        labels (numpy.ndarray): The unit labels on the same grid (wrd_flows.rasterize_units).
+        unit_codes (list[str]): The unit code of each label, from label 1.
+        graph (dict[str, list[str]]): The flow graph (wrd_flows.build_flow_graph).
+
+    Returns:
+        wrc (numpy.ndarray): The WRC of each cell. NaN where the runoff or the mean over the descendants has no value,
+            and where |qi - wc| is less than utilities.WRC_MIN_DENOMINATOR.
+    """
+
     withdrawal = numpy.where(numpy.isfinite(runoff) & numpy.isnan(withdrawal), 0.0, withdrawal)
     consumption = numpy.where(numpy.isfinite(runoff) & numpy.isnan(consumption), 0.0, consumption)
 
@@ -111,7 +150,7 @@ def compute_wrc(
     numerator = (means[:, 0] - means[:, 1])[labels]
 
     denominator = runoff - consumption
-    denominator[numpy.abs(denominator) < 1e-6] = numpy.nan
+    denominator[numpy.abs(denominator) < utilities.WRC_MIN_DENOMINATOR] = numpy.nan
 
     with numpy.errstate(divide="ignore", invalid="ignore"):
         wrc = numerator / denominator
@@ -120,97 +159,86 @@ def compute_wrc(
     return wrc
 
 
-def run(
-    huc2s: list[str],
+def run_year(
     hucs: geopandas.GeoDataFrame,
-    climate_models: list[str],
-    years: list[int],
-    root_output_directory: str,
-    levels: list[int] = list(LEVELS),
+    climate_model: str,
+    year: int,
+    root_output_directory: Path,
+    networks: list[dict[str, Any]],
+    rasters: wrd_flows.BasinRasters,
 ) -> None:
-    """Network RWY and WRC at every level in `levels`, for every climate model and
-    year. `hucs` is the basin's huc4s (for clipping and map outlines), as for
-    wrd_flows.run. The rasters are prepared once per year and shared by the levels."""
-    hu12s = wrd_flows.load_hu12s(huc2s)
-    networks = []
-    for level in levels:
-        units = wrd_flows.load_units(hu12s, level)
-        networks.append(
-            {
-                "level": level,
-                "graph": wrd_flows.build_flow_graph(wrd_flows.load_unit_destinations(hu12s, level), level),
-                "units": units,
-                "unit_codes": units["unit"].tolist(),
-            }
+    """
+    Computes and writes the RWY and the WRC of one scenario and year at each level. Prints the statistics of each
+    level.
+
+    Writes quickflow/<scenario>/<scenario>_<year>_averaged_basin.tif, and <scenario>_<year>_rwy.tif and .png in
+    rwy/huc<level>/<scenario>/ and <scenario>_<year>_wrc.tif and .png in wrc/huc<level>/<scenario>/, under
+    root_output_directory.
+
+    Parameters:
+        hucs (geopandas.GeoDataFrame): The huc4 polygons of the basin, for the clip and the map outlines.
+        climate_model (str): The scenario, for example SSP245.
+        year (int): The year.
+        root_output_directory (Path): The output directory of the basin.
+        networks (list[dict[str, Any]]): The networks (wrd_flows.build_level).
+        rasters (wrd_flows.BasinRasters): The rasters of the scenario and year (wrd_flows.prepare_basin_rasters).
+    """
+
+    quickflow_directory = utilities.create_directory(Path(root_output_directory, "quickflow", climate_model))
+    averaged, averaged_profile, _ = raster_preparation.read_national_raster(
+        raster_preparation.national_quickflow_path(climate_model, year)
+    )
+    quickflow, quickflow_profile, _ = utilities.clip_raster(
+        averaged,
+        averaged_profile,
+        hucs.geometry,
+        Path(quickflow_directory, f"{climate_model}_{year}_averaged_basin.tif"),
+    )
+    runoff, consumption, withdrawal, profile = rasters
+
+    for network in networks:
+        level = network["level"]
+        rwy_directory = utilities.create_directory(Path(root_output_directory, "rwy", f"huc{level}", climate_model))
+        wrc_directory = utilities.create_directory(Path(root_output_directory, "wrc", f"huc{level}", climate_model))
+
+        rwy = compute_rwy(
+            quickflow.astype("float64"),
+            wrd_flows.unit_labels(network, quickflow_profile),
+            network["unit_codes"],
+            network["graph"],
+        )
+        rwy, rwy_profile, _ = utilities.save_raster(
+            rwy,
+            quickflow_profile,
+            Path(rwy_directory, f"{climate_model}_{year}_rwy.tif"),
+        )
+        utilities.print_stats(rwy, f"RWY huc{level} ({climate_model}, {year})")
+        index_maps.plot_rwy_classes(
+            rwy,
+            rwy_profile,
+            hucs,
+            Path(rwy_directory, f"{climate_model}_{year}_rwy.png"),
+            title=f"RWY huc{level} ({climate_model}): {year}",
         )
 
-    for climate_model in climate_models:
-        for year in years:
-            averaged, averaged_profile, _ = raster_preparation.average_quickflow_raster(
-                climate_model, year, root_output_directory
-            )
-            quickflow, quickflow_profile, _ = utilities.clip_raster(
-                averaged,
-                averaged_profile,
-                hucs.geometry,
-                path.join(
-                    root_output_directory,
-                    "quickflow",
-                    climate_model,
-                    f"{climate_model}_{year}_averaged_basin.tif",
-                ),
-            )
-            runoff, consumption, withdrawal, profile = wrd_flows.prepare_basin_rasters(
-                hucs, climate_model, year, root_output_directory
-            )
-
-            for network in networks:
-                level = network["level"]
-                rwy_directory = utilities.create_directory(
-                    path.join(root_output_directory, "rwy", f"huc{level}", climate_model)
-                )
-                wrc_directory = utilities.create_directory(
-                    path.join(root_output_directory, "wrc", f"huc{level}", climate_model)
-                )
-
-                rwy = compute_rwy(
-                    quickflow.astype("float64"),
-                    wrd_flows.rasterize_units(network["units"], quickflow_profile),
-                    network["unit_codes"],
-                    network["graph"],
-                )
-                rwy, rwy_profile, _ = utilities.save_raster(
-                    rwy,
-                    quickflow_profile,
-                    path.join(rwy_directory, f"{climate_model}_{year}_rwy.tif"),
-                )
-                utilities.compute_stats(rwy, f"RWY huc{level} ({climate_model}, {year})")
-                main.plot_rwy_classes(
-                    rwy,
-                    rwy_profile,
-                    hucs,
-                    path.join(rwy_directory, f"{climate_model}_{year}_rwy.png"),
-                    title=f"RWY huc{level} ({climate_model}): {year}",
-                )
-
-                wrc = compute_wrc(
-                    runoff,
-                    consumption,
-                    withdrawal,
-                    wrd_flows.rasterize_units(network["units"], profile),
-                    network["unit_codes"],
-                    network["graph"],
-                )
-                wrc, wrc_profile, _ = utilities.save_raster(
-                    wrc,
-                    profile,
-                    path.join(wrc_directory, f"{climate_model}_{year}_wrc.tif"),
-                )
-                utilities.compute_stats(wrc, f"WRC huc{level} ({climate_model}, {year})")
-                main.plot_wrc_classes(
-                    wrc,
-                    wrc_profile,
-                    hucs,
-                    path.join(wrc_directory, f"{climate_model}_{year}_wrc.png"),
-                    title=f"WRC huc{level} ({climate_model}): {year}",
-                )
+        wrc = compute_wrc(
+            runoff,
+            consumption,
+            withdrawal,
+            wrd_flows.unit_labels(network, profile),
+            network["unit_codes"],
+            network["graph"],
+        )
+        wrc, wrc_profile, _ = utilities.save_raster(
+            wrc,
+            profile,
+            Path(wrc_directory, f"{climate_model}_{year}_wrc.tif"),
+        )
+        utilities.print_stats(wrc, f"WRC huc{level} ({climate_model}, {year})")
+        index_maps.plot_wrc_classes(
+            wrc,
+            wrc_profile,
+            hucs,
+            Path(wrc_directory, f"{climate_model}_{year}_wrc.png"),
+            title=f"WRC huc{level} ({climate_model}): {year}",
+        )
