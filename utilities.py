@@ -24,7 +24,7 @@ RasterResult = tuple[numpy.ndarray, dict[str, Any], Path]  # (data, profile, pat
 CUBIC_METRES_PER_MILLION_GALLONS = 3785.411784
 MM_PER_M = 1000
 
-WRC_MIN_DENOMINATOR = 1e-6  # mm/yr. A cell with a smaller |qi - wc| has no WRC, as in the notebook
+WRC_MIN_DENOMINATOR = 1e-6  # mm/yr. A cell with a smaller |qi - wc| has no WRC, as in the original method
 
 
 def create_directory(directory: Path) -> Path:

@@ -58,8 +58,8 @@ BasinRasters = tuple[
 
 NHDPLUS_GDB = Path("input", "NHDPlus_H_National_Release_2_GDB.gdb")
 
-# WRD classes of the notebook legend, with a band around 0 for the class "= 0". The colours are in the reverse order
-# of the notebook, to complement WRC
+# WRD classes of the original method, with a band around 0 for the class "= 0". The colours are in the reverse
+# order of the original method, to complement WRC
 WRD_EPSILON = 1e-6
 WRD_BOUNDARIES = [-100, -2, -1, -WRD_EPSILON, WRD_EPSILON, 1, 2, 100]
 WRD_COLORS = ["blue", "deepskyblue", "lightblue", "lightgray", "yellow", "orange", "darkred"]
@@ -110,7 +110,7 @@ def load_huc12s(huc2s: list[str], ignore_geometry: bool = False) -> geopandas.Ge
     """
     Reads the WBDHU12 layer of the NHDPlus HR GDB, with the tohuc routing, for the given huc2s.
 
-    The huc12 codes of the GDB and of the input/HUC shapefiles are from different WBD versions. Thus the unit polygons
+    The huc12 codes of the GDB and of the WBD shapefiles are from different WBD versions. Thus the unit polygons
     of all levels also come from the GDB (load_units).
 
     Corrects the tohuc with TOHUC_REPLACEMENTS and TOHUC_OVERRIDES. Prints the number of outlet huc12s with a numeric

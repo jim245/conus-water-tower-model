@@ -12,8 +12,8 @@ RWY and WRC compare each upstream cell of a basin with one downstream outlet reg
     WW     = the surface-water public-supply withdrawal (pws-sw), in mm/yr
     wc     = the consumption (irrigation, pws-cu and thermoelectric), in mm/yr
 
-The means are over the finite, non-negative cells (utilities.safe_mean). WW has no 0.75 factor: the notebook WRC uses
-it for the Potomac study only.
+The means are over the finite, non-negative cells (utilities.safe_mean). WW has no 0.75 factor: the original method
+uses it for the Potomac study only.
 
 For each basin, WRD (wrd_flows.run_year) and RWY and WRC at each network level (network_indices.run_year) follow.
 Writes output/<basin>/. Run conus_maps.py after this module for the CONUS maps.

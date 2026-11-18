@@ -256,7 +256,7 @@ def prepare_pws_withdrawal_raster(year: int) -> utilities.RasterResult:
     """
     Converts the surface-water public-supply withdrawal (pws-sw) to mm/yr, on the full grid.
 
-    The withdrawal is surface water only, as SW_WD in the notebook: groundwater withdrawals do not come from the runoff
+    The withdrawal is surface water only, as in the original method: groundwater withdrawals do not come from the runoff
     that the indices compare against. It is not the withdrawal minus pws-cu, because that difference is return flow.
 
     pws-sw has no value (NaN) outside the water service areas. There is no public supply there, thus WRC and WRD count

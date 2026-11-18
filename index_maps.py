@@ -94,7 +94,7 @@ def plot_wrc_classes(
     """
     Classifies the WRC into the classes of WRC_LABELS, prints the class counts and plots the class map.
 
-    The classes are the classes of the notebook WRC: WRC <= -1, -1 < WRC < 0, 0 <= WRC <= 1 and WRC > 1.
+    The classes are the WRC classes of the original method: WRC <= -1, -1 < WRC < 0, 0 <= WRC <= 1 and WRC > 1.
 
     Parameters:
         wrc (numpy.ndarray): The WRC.
