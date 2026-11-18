@@ -18,12 +18,15 @@ failOnWarnings = false
 # vulture does not expand globs, so add each new top-level module here
 paths = [
   "main.py",
+  "index_maps.py",
   "raster_preparation.py",
   "utilities.py",
   "wrd_flows.py",
   "network_indices.py",
   "conus_maps.py",
 ]
+# a diagnostic that the ARTIFACT_EDGES error message in wrd_flows.py tells the user to run
+ignore_names = ["print_flow_chains"]
 
 [tool.codespell]
 skip = "./old,./input,./output,./.conda,./.venv,*.ipynb"
