@@ -78,7 +78,7 @@ def plot_rwy_classes(
         title=title,
         cmap=mcolors.ListedColormap(RWY_COLORS),
         norm=mcolors.BoundaryNorm(boundaries=numpy.arange(n_classes + 1) - 0.5, ncolors=n_classes),
-        cbar_label="Runoff Water Yield (RWY)",
+        cbar_label="Relative Water Yield (RWY)",
         cbar_ticks=list(range(n_classes)),
         cbar_ticklabels=RWY_LABELS,
     )

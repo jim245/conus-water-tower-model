@@ -1,5 +1,5 @@
 """
-Computes RWY (Runoff Water Yield) and WRC (Water Resource Contribution) for each hydrologic unit of a basin, at the
+Computes RWY (Relative Water Yield) and WRC (Water Resource Contribution) for each hydrologic unit of a basin, at the
 huc4, huc8 and huc12 levels.
 
 main.py compares each upstream cell of a basin with one downstream outlet region. This module compares each cell with

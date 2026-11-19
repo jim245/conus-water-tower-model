@@ -1,6 +1,6 @@
 """
-Computes RWY (Runoff Water Yield), WRC (Water Resource Contribution) and WRD (Water Resource Dependency) for each basin
-of CONUS_BASINS. The scenarios are CLIMATE_MODELS and the years are YEARS.
+Computes RWY (Relative Water Yield), WRC (Water Resource Contribution) and WRD (Water Resource Dependency) for each
+basin of CONUS_BASINS. The scenarios are CLIMATE_MODELS and the years are YEARS.
 
 RWY and WRC compare each upstream cell of a basin with one downstream outlet region D (BASIN_MAPPINGS):
 
@@ -247,7 +247,7 @@ def run_rwy(
             title=f"RWY ({climate_model}): {YEARS[0]}-{YEARS[-1]}",
             cmap=plt.get_cmap("YlOrRd").copy(),
             norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
-            cbar_label="Runoff Water Yield (RWY)",
+            cbar_label="Relative Water Yield (RWY)",
         )
 
 

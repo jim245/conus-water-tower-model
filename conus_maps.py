@@ -47,7 +47,7 @@ OUTLINE_MIN_HOLE_AREA = 1e6  # m², one cell of the 1 km grid
 # (index, colorbar label, colormap, True if the index has a basin-level map). RWY and WRC use the colormaps of the
 # main.py diffs
 DIFF_INDICES = [
-    ("rwy", "Runoff Water Yield (RWY)", "YlOrRd", True),
+    ("rwy", "Relative Water Yield (RWY)", "YlOrRd", True),
     ("wrc", "Water Resource Contribution (WRC)", "viridis", True),
     ("wrd", "Water Resource Dependency (WRD)", "RdBu_r", False),
 ]
