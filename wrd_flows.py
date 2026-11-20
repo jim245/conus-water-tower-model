@@ -191,6 +191,13 @@ ARTIFACT_EDGES = {
     # Pine Creek, which routes into Devils Kitchen Reservoir, a closed sink in 16030008. With it, 16030005 <-> 16030008
     # is a cycle
     ("16030005", "16030008"),
+    # the mouths of the Penobscot, Merrimack, Hudson (Lower Bay), Chesapeake and Columbia. Each routes into an open-ocean
+    # huc12 ("...-Atlantic Ocean", "...-Pacific Ocean") of the neighbouring coastal huc4. The water goes to the sea
+    ("0102", "0105"),
+    ("0107", "0106"),
+    ("0203", "0204"),
+    ("0208", "0204"),
+    ("1708", "1710"),
 }
 
 
@@ -271,6 +278,21 @@ def find_origins(graph: dict[str, list[str]]) -> list[str]:
 
     downstream_targets = {dest for dests in graph.values() for dest in dests}
     return [unit for unit in graph if unit not in downstream_targets]
+
+
+def find_outlets(graph: dict[str, list[str]]) -> list[str]:
+    """
+    Finds the outlet units: the units without a downstream unit in the graph. A unit whose downstream units are all
+    outside the graph (in another basin) is also an outlet.
+
+    Parameters:
+        graph (dict[str, list[str]]): The flow graph (build_flow_graph).
+
+    Returns:
+        outlets (list[str]): The outlet units, in the order of the graph.
+    """
+
+    return [unit for unit, downstreams in graph.items() if not any(dest in graph for dest in downstreams)]
 
 
 def build_ancestor_map(graph: dict[str, list[str]]) -> dict[str, set[str]]:
@@ -399,8 +421,8 @@ def trace_paths(origin: str, graph: dict[str, list[str]]) -> list[list[str]]:
 def print_flow_chains(huc2s: list[str], level: int = 4) -> None:
     """
     Prints the downstream chains of each headwater to its outlets. A diagnostic, not a pipeline step. Use it to check
-    the network, for example before a change to ARTIFACT_EDGES or to the upstream/downstream huc4s of
-    main.BASIN_MAPPINGS.
+    the network, for example before a change to ARTIFACT_EDGES. Such a change can change the outlets (find_outlets),
+    and thus the downstream outlet regions of main.main.
 
     Parameters:
         huc2s (list[str]): The huc2 codes.
@@ -694,8 +716,9 @@ def build_level(huc12s: geopandas.GeoDataFrame, units: geopandas.GeoDataFrame, l
 
     graph = build_flow_graph(load_unit_destinations(huc12s, level), level)
 
-    outlets = [unit for unit, downstream in graph.items() if not downstream]
-    print(f"huc{level}: {len(graph)} units, {len(outlets)} outlet(s), {len(find_origins(graph))} headwater(s)")
+    print(
+        f"huc{level}: {len(graph)} units, {len(find_outlets(graph))} outlet(s), {len(find_origins(graph))} headwater(s)"
+    )
 
     return {
         "level": level,

@@ -7,8 +7,8 @@ these grids, thus the mosaic copies each basin value to its cell. The basins do 
 cell-centre rule, thus each cell has the value of one basin. The values are not computed again: each cell keeps the
 value that its basin computed.
 
-Blank areas: huc2 09 is in no basin. At the basin level, RWY and WRC are for the upstream cells only, thus the excluded
-and outlet huc4s of main.BASIN_MAPPINGS are blank. A basin that does not have a file is blank in that map.
+Blank areas: huc2 09 is in no basin. At the basin level, RWY and WRC are for the upstream cells only, thus the outlet
+huc4s of each basin (wrd_flows.find_outlets) are blank. A basin that does not have a file is blank in that map.
 
 Reads the files that are in output/<basin>/. Does not check that they come from the current code and YEARS.
 """
@@ -66,7 +66,7 @@ def load_conus_hucs() -> geopandas.GeoDataFrame:
         hucs (geopandas.GeoDataFrame): One row for each huc4, with the columns unit and geometry, in EPSG:5070.
     """
 
-    huc2s = sorted({huc2 for basin in main.CONUS_BASINS for huc2 in main.BASIN_MAPPINGS[basin][0]})
+    huc2s = sorted({huc2 for basin_huc2s in main.CONUS_BASINS.values() for huc2 in basin_huc2s})
     # one huc2 at a time, so that the huc12s of only one huc2 are in memory
     hucs = pandas.concat(
         [wrd_flows.load_units(wrd_flows.load_huc12s([huc2]), 4) for huc2 in huc2s], ignore_index=True

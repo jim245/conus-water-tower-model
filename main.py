@@ -2,7 +2,8 @@
 Computes RWY (Relative Water Yield), WRC (Water Resource Contribution) and WRD (Water Resource Dependency) for each
 basin of CONUS_BASINS. The scenarios are CLIMATE_MODELS and the years are YEARS.
 
-RWY and WRC compare each upstream cell of a basin with one downstream outlet region D (BASIN_MAPPINGS):
+RWY and WRC compare each upstream cell of a basin with one downstream outlet region D, the huc4 outlets of the basin
+(wrd_flows.find_outlets). The upstream area is the basin without D:
 
     RWY_cell = q_cell / mean(q over D)
     WRC_cell = (mean(Q over D) - mean(WW over D)) / (qi_cell - wc_cell)
@@ -40,115 +41,22 @@ import raster_preparation
 import utilities
 import wrd_flows
 
-# basin: (huc2s, huc4s excluded from the upstream area, huc4s of the downstream outlet region). A huc4 that is not in
-# the flow network of the basin goes in the excluded list and not in the outlet region (0807 and 0808 in the MRB, 1508
-# in the CRB)
-BASIN_MAPPINGS = {
-    "NER": (
-        ["01"],
-        ["0101", "0105", "0106", "0108", "0109", "0110"],
-        ["0101", "0105", "0106", "0108", "0109", "0110"],
-    ),  # New England Region
-    "MAR": (
-        ["02"],
-        ["0203", "0204", "0208"],
-        ["0203", "0204", "0208"],
-    ),  # Mid-Atlantic Region
-    "SAG": (
-        ["03"],
-        [
-            "0301",
-            "0302",
-            "0303",
-            "0304",
-            "0305",
-            "0306",
-            "0307",
-            "0308",
-            "0310",
-            "0311",
-            "0312",
-            "0313",
-            "0314",
-            "0317",
-            "0318",
-        ],
-        [
-            "0301",
-            "0302",
-            "0303",
-            "0304",
-            "0305",
-            "0306",
-            "0307",
-            "0308",
-            "0310",
-            "0311",
-            "0312",
-            "0313",
-            "0314",
-            "0317",
-            "0318",
-        ],
-    ),  # South Atlantic-Gulf Region
-    "GLR": (["04"], ["0429", "0430", "0431"], ["0429", "0430", "0431"]),  # Great Lakes Region
-    "OHR": (["05"], ["0514"], ["0514"]),  # Ohio Region
-    "TNR": (["06"], ["0604"], ["0604"]),  # Tennessee Region
-    "UMR": (["07"], ["0714"], ["0714"]),  # Upper Mississippi Region
-    "LMR": (["08"], ["0809"], ["0809"]),  # Lower Mississippi Region
-    "MOR": (["10"], ["1030"], ["1030"]),  # Missouri Region
-    "AWR": (
-        ["11"],
-        ["1101", "1111", "1114"],
-        ["1101", "1111", "1114"],
-    ),  # Arkansas-White-Red Region
-    "MRB": (
-        ["05", "06", "07", "08", "10", "11"],
-        ["0807", "0808", "0809"],
-        ["0809"],
-    ),  # Mississippi River Basin
-    "TGR": (
-        ["12"],
-        ["1204", "1209", "1210", "1211"],
-        ["1204", "1209", "1210", "1211"],
-    ),  # Texas-Gulf Region
-    "RGR": (["13"], ["1305", "1309"], ["1305", "1309"]),  # Rio Grande Region
-    "UCR": (["14"], ["1408"], ["1408"]),  # Upper Colorado Region
-    "LCR": (["15"], ["1503", "1508"], ["1503"]),  # Lower Colorado Region
-    "CRB": (["14", "15"], ["1503", "1508"], ["1503"]),  # Colorado River Basin
-    "GBR": (
-        ["16"],
-        ["1602", "1603", "1605", "1606"],
-        ["1602", "1603", "1605", "1606"],
-    ),  # Great Basin Region
-    "PNW": (
-        ["17"],
-        ["1708", "1710", "1711", "1712"],
-        ["1708", "1710", "1711", "1712"],
-    ),  # Pacific Northwest Region
-    "CAR": (
-        ["18"],
-        ["1801", "1803", "1805", "1806", "1807", "1808", "1809", "1810"],
-        ["1801", "1803", "1805", "1806", "1807", "1808", "1809", "1810"],
-    ),  # California Region
+# basin: huc2s. The basins of the CONUS mosaic, with no overlap. The Mississippi and the Colorado are whole river
+# systems (MRB, CRB), not their huc2 regions, so that each cell has its real outlet. huc2 09 (Souris-Red-Rainy) is in no
+# basin and is a gap in the mosaic
+CONUS_BASINS = {
+    "NER": ["01"],  # New England Region
+    "MAR": ["02"],  # Mid-Atlantic Region
+    "SAG": ["03"],  # South Atlantic-Gulf Region
+    "GLR": ["04"],  # Great Lakes Region
+    "MRB": ["05", "06", "07", "08", "10", "11"],  # Mississippi River Basin
+    "TGR": ["12"],  # Texas-Gulf Region
+    "RGR": ["13"],  # Rio Grande Region
+    "CRB": ["14", "15"],  # Colorado River Basin
+    "GBR": ["16"],  # Great Basin Region
+    "PNW": ["17"],  # Pacific Northwest Region
+    "CAR": ["18"],  # California Region
 }
-
-# the basins of the CONUS mosaic, with no overlap. The Mississippi and the Colorado are whole river systems (MRB, CRB),
-# not their huc2 regions, so that each cell has its real outlet. huc2 09 (Souris-Red-Rainy) is in no basin and is a gap
-# in the mosaic
-CONUS_BASINS = [
-    "NER",
-    "MAR",
-    "SAG",
-    "GLR",
-    "MRB",
-    "TGR",
-    "RGR",
-    "CRB",
-    "GBR",
-    "PNW",
-    "CAR",
-]
 
 CLIMATE_MODELS = ["SSP245", "SSP370"]
 YEARS = list(range(2015, 2020 + 1))  # the diff maps (first and last year) need 2 or more years
@@ -390,37 +298,30 @@ def main() -> None:
 
     First computes the national rasters (raster_preparation.prepare_national_rasters), one time for all basins. The huc4
     polygons are the GDB huc12s dissolved by code (wrd_flows.load_units): the polygons of the flow network. For each
-    basin, builds the networks one time. Prepares the water use one time for each year, and the runoff one time for
-    each scenario and year. The WRD and the network RWY and WRC use the same networks and rasters.
-
-    Raises:
-        ValueError: If a huc4 of BASIN_MAPPINGS is not a huc4 of the basin in the GDB.
+    basin, builds the networks one time. The downstream outlet region of RWY and WRC is the huc4 outlets of the network.
+    Prepares the water use one time for each year, and the runoff one time for each scenario and year. The WRD and the
+    network RWY and WRC use the same networks and rasters.
     """
 
     raster_preparation.prepare_national_rasters(CLIMATE_MODELS, YEARS)
 
-    for basin in CONUS_BASINS:
-        huc2s, excluded_upstream_huc4s, downstream_huc4s = BASIN_MAPPINGS[basin]
-
+    for basin, huc2s in CONUS_BASINS.items():
         huc12s = wrd_flows.load_huc12s(huc2s)
         units = {level: wrd_flows.load_units(huc12s, level) for level in wrd_flows.LEVELS}
         basin_hucs = units[4]
 
-        unknown_huc4s = sorted(set(excluded_upstream_huc4s + downstream_huc4s) - set(basin_hucs["unit"]))
-        if unknown_huc4s:
-            raise ValueError(
-                f"{basin}: the huc4s {unknown_huc4s} of BASIN_MAPPINGS are not huc4s of the basin in the GDB"
-            )
+        networks = [wrd_flows.build_level(huc12s, units[level], level) for level in wrd_flows.LEVELS]
+        outlet_huc4s = wrd_flows.find_outlets(networks[wrd_flows.LEVELS.index(4)]["graph"])
+        print(f"{basin}: downstream outlet region {outlet_huc4s}")
 
-        upstream_hucs = basin_hucs[~basin_hucs["unit"].isin(excluded_upstream_huc4s)]
-        downstream_hucs = basin_hucs[basin_hucs["unit"].isin(downstream_huc4s)]
+        upstream_hucs = basin_hucs[~basin_hucs["unit"].isin(outlet_huc4s)]
+        downstream_hucs = basin_hucs[basin_hucs["unit"].isin(outlet_huc4s)]
 
         output_directory = utilities.create_directory(Path("output", basin))
 
         run_rwy(upstream_hucs, downstream_hucs, basin_hucs, output_directory)
         run_wrc(upstream_hucs, downstream_hucs, basin_hucs, output_directory)
 
-        networks = [wrd_flows.build_level(huc12s, units[level], level) for level in wrd_flows.LEVELS]
         for year in YEARS:
             water_use = wrd_flows.prepare_water_use(basin_hucs, year, output_directory)
             for climate_model in CLIMATE_MODELS:

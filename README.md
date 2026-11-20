@@ -87,7 +87,7 @@ A unit without ancestors (a headwater) has no WRD. The WRD is 0 in a unit where 
 The network comes from the `tohuc` routing of the HUC-12s in the NHDPlus HR geodatabase. At HUC-4 and HUC-8, unit A has an edge to unit B if a HUC-12 in A routes to a HUC-12 in B. The unit polygons of all levels are the HUC-12s of the geodatabase, dissolved by code prefix. Thus the polygons and the network have the same codes. Two hand-checked tables in [wrd_flows.py](./wrd_flows.py) correct the routing:
 
 - `TOHUC_REPLACEMENTS` and `TOHUC_OVERRIDES` give the downstream HUC-12 of the `tohuc` codes that are in no HUC-12 of the geodatabase (the Great Lakes and four inland rivers).
-- `ARTIFACT_EDGES` removes the HUC-4 and HUC-8 edges that are not real flow between the units. Each of them made a cycle, or made a full basin an ancestor of its neighbour.
+- `ARTIFACT_EDGES` removes the HUC-4 and HUC-8 edges that are not real flow between the units. Each of them made a cycle, or made a full basin an ancestor of its neighbour. Five of them are river mouths that route into an open-ocean HUC-12 of the neighbouring coastal HUC-4 (Penobscot, Merrimack, Hudson, Chesapeake, Columbia).
 
 ## Classes
 
@@ -103,21 +103,21 @@ The `.png` maps show these classes. The GeoTIFFs hold the values.
 
 The basins of the CONUS maps do not overlap. The Mississippi and the Colorado are whole river systems (MRB, CRB), not their HUC-2 regions. HUC-2 09 (Souris-Red-Rainy) is in no basin.
 
+The downstream outlet region of a basin is the set of its HUC-4 outlets in the flow network. These are the HUC-4s without a downstream HUC-4 in the basin. The upstream area is the basin without its outlet region. `main.py` prints the outlet region of each basin. With the current geodatabase and `ARTIFACT_EDGES`:
+
 | Basin                       | HUC-2                  | Downstream outlet region (HUC-4)   |
 | --------------------------- | ---------------------- | ---------------------------------- |
-| NER New England             | 01                     | 0101, 0105, 0106, 0108, 0109, 0110 |
+| NER New England             | 01                     | 0101, 0102, 0105-0110              |
 | MAR Mid-Atlantic            | 02                     | 0203, 0204, 0208                   |
 | SAG South Atlantic-Gulf     | 03                     | 0301-0308, 0310-0314, 0317, 0318   |
 | GLR Great Lakes             | 04                     | 0429, 0430, 0431                   |
-| MRB Mississippi River Basin | 05, 06, 07, 08, 10, 11 | 0809                               |
-| TGR Texas-Gulf              | 12                     | 1204, 1209, 1210, 1211             |
+| MRB Mississippi River Basin | 05, 06, 07, 08, 10, 11 | 0808, 0809                         |
+| TGR Texas-Gulf              | 12                     | 1204, 1207, 1209, 1210, 1211       |
 | RGR Rio Grande              | 13                     | 1305, 1309                         |
-| CRB Colorado River Basin    | 14, 15                 | 1503                               |
+| CRB Colorado River Basin    | 14, 15                 | 1503, 1508                         |
 | GBR Great Basin             | 16                     | 1602, 1603, 1605, 1606             |
 | PNW Pacific Northwest       | 17                     | 1708, 1710, 1711, 1712             |
-| CAR California              | 18                     | 1801, 1803, 1805-1810              |
-
-The upstream area of a basin is the basin without its outlet region. Some HUC-4s are not in the flow network of their basin (0807 and 0808 in the MRB, 1508 in the CRB). They are also not in the upstream area.
+| CAR California              | 18                     | 1801, 1805-1810                    |
 
 Blank areas in the maps:
 
