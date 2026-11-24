@@ -1,0 +1,705 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Validate https://www1.usgs.gov/mp/index.php
+  Search TODO before submitting.
+-->
+<metadata>
+  <idinfo>
+    <citation>
+      <citeinfo>
+        <!-- TODO: complete the author list and the order -->
+        <origin>Eric C. Sjöstedt</origin>
+        <origin>Jade I. Meskill</origin>
+        <origin>TODO - other authors</origin>
+        <!-- TODO: replace with actual publication date once assigned -->
+        <pubdate>Unknown</pubdate>
+        <!-- TODO: confirm the title -->
+        <title>Water-tower indices (Relative Water Yield, Water Resource Contribution, and Water Resource Dependency) at the basin and HUC-4, HUC-8, and HUC-12 network levels for the conterminous United States, SSP2-4.5 and SSP3-7.0, 2015 to 2020.</title>
+        <geoform>raster digital data</geoform>
+        <pubinfo>
+          <pubplace>TODO - publication place</pubplace>
+          <publish>TODO - publisher</publish>
+        </pubinfo>
+        <onlink>TODO - published DOI link</onlink>
+      </citeinfo>
+    </citation>
+    <descript>
+      <abstract>This data release provides three water-tower indices for the basins of the conterminous United States (CONUS). The Relative Water Yield (RWY) tells how much runoff a location makes, compared with the runoff downstream. The Water Resource Contribution (WRC) tells how much a location supplies to the water use downstream. The Water Resource Dependency (WRD) tells how much a hydrologic unit depends on the water of its upstream units. The indices are given for two climate scenarios (SSP2-4.5 and SSP3-7.0), for each year from 2015 to 2020, and as the change from 2015 to 2020.
+
+RWY and WRC are given at the basin level and at three network levels of the Hydrologic Unit Code (HUC) watersheds: HUC-4, HUC-8, and HUC-12. WRD is given at the three network levels. At the basin level, each upstream location of a basin is compared with one downstream outlet region of that basin. At a network level, each location is compared with all of the hydrologic units downstream of its unit. The flow network of each level is made from the HUC-12 routing of the NHDPlus High Resolution (NHDPlus HR) dataset.
+
+The runoff is Quickflow, the mean of five CMIP6 global climate models (GCMs) for each scenario. The water use is the gridded irrigation, public-supply, and thermoelectric power plant water use of 2015 to 2020 on a 1000-meter grid.</abstract>
+      <purpose>To identify the locations of CONUS that supply runoff to the water use downstream (water towers), and the hydrologic units that depend on upstream water, at the basin scale and at three watershed scales, under two climate scenarios.</purpose>
+      <supplinf>This data release includes one GeoTIFF raster for each index, level, scenario, and year, and one GeoTIFF raster of the change from 2015 to 2020 for each index, level, and scenario. The file names are:
+  &lt;index&gt;/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_&lt;index&gt;.tif (basin level, RWY and WRC only)
+  &lt;index&gt;/huc&lt;level&gt;/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_&lt;index&gt;.tif (network levels)
+  &lt;index&gt;/[huc&lt;level&gt;/]&lt;ssp&gt;/&lt;ssp&gt;_diff_&lt;index&gt;.tif (2020 minus 2015)
+&lt;index&gt; is rwy, wrc, or wrd. &lt;level&gt; is 4, 8, or 12. &lt;ssp&gt; is SSP245 (SSP2-4.5) or SSP370 (SSP3-7.0). &lt;year&gt; is the four-digit calendar year, 2015 to 2020.
+
+Every raster in this data release has a single 32-bit floating point band ("Value"). The indices are ratios and have no units. NaN is the nodata value. The entity and attribute overview tells which cells are NaN. See the accompanying data dictionary (data_dictionary.csv) for the field descriptions and value ranges of each product.
+
+The rasters are on two grids. The RWY rasters are on the 800-meter grid of the Quickflow input: USA Contiguous Albers Equal Area Conic (ESRI:102003, NAD83, standard parallels 29.5 and 45.5, central meridian -96.0, latitude of origin 37.5), 5770 columns and 3622 rows. The WRC and WRD rasters are on the 1000-meter grid of the water-use input: Conus Albers (EPSG:5070, NAD83, standard parallels 29.5 and 45.5, central meridian -96.0, latitude of origin 23.0), 4689 columns and 3296 rows. The spatial reference section of this record gives the 1000-meter grid.
+
+Equations. q is the Quickflow on the 800-meter grid. Q and qi are the same Quickflow on the 1000-meter grid, in millimeters per year (mm/yr). WW is the public-supply surface-water withdrawal, and wc is the sum of the irrigation consumption, the public-supply consumption, and the thermoelectric consumption, all in mm/yr on the 1000-meter grid. D is the downstream region of a cell: the outlet region of its basin at the basin level, or all of the units downstream of its unit at a network level.
+  RWY_cell = q_cell / mean(q over D)
+  WRC_cell = (mean(Q over D) - mean(WW over D)) / (qi_cell - wc_cell)
+  WRD_L = b_L / (sum_b_M / N_L), with b_L = Q - WW for each cell of unit L, sum_b_M = sum(qi_A) - sum(wc_A) over all cells of all upstream units A of L, and N_L the number of cells of L with a value of b_L.
+A mean uses only the finite, non-negative cells. A mean over D is the mean of all its cells, not a mean of the unit means. WRC and WRD can be negative where the water use is larger than the runoff. The WRC is very large where qi_cell - wc_cell is near 0, thus use the classes of the WRC (less than or equal to -1, -1 to 0, 0 to 1, more than 1) for most analyses.
+
+Basins and downstream outlet regions (HUC-4) of the basin level. The outlet region of a basin is the set of its HUC-4s that have no downstream HUC-4 in the flow network of the basin. The upstream area is the basin without its outlet region.
+  NER New England (HUC-2 01): 0101, 0102, 0105-0110
+  MAR Mid-Atlantic (HUC-2 02): 0203, 0204, 0208
+  SAG South Atlantic-Gulf (HUC-2 03): 0301-0308, 0310-0314, 0317, 0318
+  GLR Great Lakes (HUC-2 04): 0429, 0430, 0431
+  MRB Mississippi River Basin (HUC-2 05, 06, 07, 08, 10, 11): 0808, 0809
+  TGR Texas-Gulf (HUC-2 12): 1204, 1207, 1209, 1210, 1211
+  RGR Rio Grande (HUC-2 13): 1305, 1309
+  CRB Colorado River Basin (HUC-2 14, 15): 1503, 1508
+  GBR Great Basin (HUC-2 16): 1602, 1603, 1605, 1606
+  PNW Pacific Northwest (HUC-2 17): 1708, 1710, 1711, 1712
+  CAR California (HUC-2 18): 1801, 1805-1810
+The basins do not overlap. HUC-2 09 (Souris-Red-Rainy) is in no basin.
+
+Known limitations:
+  Inter-basin transfers are not in the model. The consumption is at the location of use, not at the location where the water leaves the river.
+  A unit that drains to more than one downstream unit adds its full surplus to each of them.
+  Inflow from Canada and Mexico is not counted. Thus a unit downstream of Canada or Mexico looks more dependent than it is.
+  The consumption is surface water, with one exception: the public-supply consumption is from all sources, and thus includes the consumption from groundwater.
+  The public-supply consumption and the total public-supply withdrawal come from independent disaggregations. Some cells have a consumption larger than the total withdrawal (small).
+  Quickflow has no unit metadata. The pipeline assumes meters per year.
+
+GCMs of the Quickflow mean: BCC-CSM2-MR, FGOALS-g3, GFDL-ESM4, INM-CM4-8, MIROC6.
+
+Source datasets:
+  Hydrography: NHDPlus High Resolution, National Release 2, layer WBDHU12 (HUC-12 polygons and the tohuc routing). TODO - citation, download date.
+  Runoff: Quickflow, five GCMs for each of SSP2-4.5 and SSP3-7.0, annual, 800-meter grid. TODO - source, version, citation, download date.
+  Water use: irrigation consumption (irr), public-supply consumption (pws-cu), public-supply surface-water withdrawal (pws-sw), and thermoelectric power plant consumption, annual mean in million gallons per day (MGD), 1000-meter grid, 2015 to 2020. TODO - citation and DOI of the water-use data release.
+
+TODO - confirm the code repository link:
+https://github.com/Sjostedt-eric/usgs_water_tower_model
+      </supplinf>
+    </descript>
+    <timeperd>
+      <timeinfo>
+        <rngdates>
+          <begdate>20150101</begdate>
+          <enddate>20201231</enddate>
+        </rngdates>
+      </timeinfo>
+      <current>Water use estimates for 2015 to 2020, and modeled runoff for 2015 to 2020 under the SSP2-4.5 and SSP3-7.0 scenarios</current>
+    </timeperd>
+    <status>
+      <progress>Complete</progress>
+      <update>None Planned</update>
+    </status>
+    <spdom>
+      <bounding>
+        <westbc>-129.5158</westbc>
+        <eastbc>-62.9930</eastbc>
+        <northbc>54.7122</northbc>
+        <southbc>22.3254</southbc>
+      </bounding>
+    </spdom>
+    <keywords>
+      <theme>
+        <themekt>None</themekt>
+        <themekey>water towers</themekey>
+        <themekey>runoff</themekey>
+        <themekey>quickflow</themekey>
+        <themekey>water use</themekey>
+        <themekey>water supply</themekey>
+        <themekey>consumptive use</themekey>
+        <themekey>water resource dependency</themekey>
+        <themekey>climate scenarios</themekey>
+        <themekey>SSP2-4.5</themekey>
+        <themekey>SSP3-7.0</themekey>
+        <themekey>CMIP6</themekey>
+        <themekey>hydrologic unit code</themekey>
+        <themekey>flow network</themekey>
+      </theme>
+      <theme>
+        <themekt>USGS Metadata Identifier</themekt>
+        <themekey>TODO - "USGS:abcdef1234567890"</themekey>
+      </theme>
+      <place>
+        <placekt>None</placekt>
+        <placekey>United States</placekey>
+        <placekey>Conterminous United States (CONUS)</placekey>
+      </place>
+    </keywords>
+    <accconst>None</accconst>
+    <!-- TODO: the USGS text of useconst and distliab applies only if the USGS publishes this release -->
+    <useconst>Unless otherwise stated, all data, metadata and related materials are considered to satisfy the quality standards relative to the purpose for which the data were collected. Although these data and associated metadata have been reviewed for accuracy and completeness and approved for release by the U.S. Geological Survey (USGS), no warranty expressed or implied is made regarding the display or utility of the data on any other system or for general or scientific purposes, nor shall the act of distribution constitute any such warranty.</useconst>
+    <ptcontac>
+      <cntinfo>
+        <cntperp>
+          <cntper>TODO - contact person</cntper>
+          <cntorg>TODO - organization</cntorg>
+        </cntperp>
+        <cntpos>TODO - position</cntpos>
+        <cntaddr>
+          <addrtype>physical</addrtype>
+          <address>TODO - address</address>
+          <city>TODO - city</city>
+          <state>TODO - state</state>
+          <postal>TODO - postal code</postal>
+          <country>US</country>
+        </cntaddr>
+        <cntvoice>TODO - telephone</cntvoice>
+        <cntemail>TODO - email</cntemail>
+      </cntinfo>
+    </ptcontac>
+    <native>Python 3.14 with GDAL 3.13.3, PROJ 9.9.0, and rasterio 1.5.2 (conda-forge environment of the code repository)</native>
+  </idinfo>
+  <dataqual>
+    <attracc>
+      <attraccr>No independent accuracy assessment was performed. No reference data are available for the indices. The indices are ratios of modeled runoff and estimated water use, thus their accuracy depends on the accuracy of these inputs. The runoff is a mean of GCM projections under two scenarios, not an observation. The accuracy of the water-use inputs is given in the metadata of the water-use data release.
+
+A ratio is not stable where its denominator is near 0. This occurs for the WRC where the runoff of a cell is almost equal to its consumption, and for the RWY and the WRD where the downstream or upstream value is small. In these cells the value can be very large (see the ranges in the data dictionary). A cell with |qi - wc| less than 0.000001 mm/yr has no WRC.</attraccr>
+    </attracc>
+    <logic>Each CONUS cell has the value of at most one basin: the basins do not overlap, and each basin clip uses the cell-center rule. The CONUS mosaics copy the basin values and do not compute them again. The pipeline stops if a flow network has a cycle, or if a water-use raster is not on the grid of the runoff raster.</logic>
+    <complete>Some cells have no value (NaN). HUC-2 09 (Souris-Red-Rainy) is in no basin. At the basin level, RWY and WRC are given only for the upstream area of each basin, thus the downstream outlet region of each basin has no value. At the network levels, a unit without downstream units (an outlet or a closed-basin sink) has no RWY and no WRC, and a unit without upstream units (a headwater) has no WRD. At HUC-4 this gives large areas without values on the coasts. Quickflow has no cells in Canada or Mexico.</complete>
+    <posacc>
+      <horizpa>
+        <horizpar>No formal positional accuracy tests were conducted.</horizpar>
+      </horizpa>
+      <vertacc>
+        <vertaccr>No formal positional accuracy tests were conducted.</vertaccr>
+      </vertacc>
+    </posacc>
+    <lineage>
+      <procstep>
+        <procdesc>Source acquisition: The HUC-12 polygons and their tohuc routing were taken from the WBDHU12 layer of the NHDPlus High Resolution National Release 2 geodatabase. The annual Quickflow rasters of five GCMs for each scenario (SSP2-4.5 and SSP3-7.0) and the annual water-use rasters of 2015 to 2020 were obtained (see supplinf). TODO - download dates and versions.</procdesc>
+        <!-- TODO: date of the source acquisition -->
+        <procdate>Unknown</procdate>
+      </procstep>
+      <procstep>
+        <procdesc>National raster preparation: For each scenario and year, the cell-by-cell mean Quickflow over the GCMs was calculated on the 800-meter Quickflow grid. A cell gets the mean of the GCMs that have a value at that cell. This mean was converted from meters per year to millimeters per year (mm/yr) and reprojected to the 1000-meter water-use grid (EPSG:5070) with average resampling. The water-use rasters were converted from million gallons per day (MGD) to mm/yr with the area of each cell. The thermoelectric consumption was resampled in MGD with sum resampling before the conversion, to keep the total.</procdesc>
+        <procdate>20261120</procdate>
+      </procstep>
+      <procstep>
+        <procdesc>Flow network: The HUC-4 and HUC-8 unit polygons were made from the HUC-12 polygons of the geodatabase, dissolved by code prefix. Thus the polygons and the network of each level have the same codes. At HUC-4 and HUC-8, unit A has an edge to unit B if a HUC-12 in A routes to a HUC-12 in B. Two hand-checked tables in the code correct the routing. The first gives the downstream HUC-12 of the tohuc codes that are in no HUC-12 of the geodatabase (the Great Lakes and four inland rivers). The second removes the HUC-4 and HUC-8 edges that are not real flow between the units. Each of these edges made a cycle, or made a full basin an upstream unit of its neighbor. Five of these edges are river mouths that route into an open-ocean HUC-12 of the neighboring coastal HUC-4 (Penobscot, Merrimack, Hudson, Chesapeake, and Columbia).</procdesc>
+        <procdate>20261120</procdate>
+      </procstep>
+      <procstep>
+        <procdesc>Basin-level RWY and WRC: For each basin, each upstream cell was compared with the downstream outlet region of the basin: the HUC-4s without a downstream HUC-4 in the flow network of the basin (see supplinf for the equations and the outlet regions). The RWY was calculated on the 800-meter Quickflow grid, and the WRC on the 1000-meter grid. Inside the runoff area, a water-use cell with no value counts as 0. The public-supply surface-water withdrawal has no value outside the water service areas, where there is no public supply. The RWY has no value where the mean downstream Quickflow is not positive.</procdesc>
+        <procdate>20261120</procdate>
+      </procstep>
+      <procstep>
+        <procdesc>Network-level RWY, WRC, and WRD: For each basin, scenario, year, and level (HUC-4, HUC-8, HUC-12), each cell was compared with all of the units downstream of its unit (RWY and WRC), and each unit was compared with the surplus of all of its upstream units (WRD). The sum of the upstream surplus does not subtract the withdrawals of the units between an upstream unit and the unit L. Thus it increases downstream, and the terminal unit gets the surplus of the full basin. The WRD is 0 in a unit where the upstream surplus is not positive.</procdesc>
+        <procdate>20261120</procdate>
+      </procstep>
+      <procstep>
+        <procdesc>CONUS mosaics: The basin rasters of each product, scenario, and year were combined into one CONUS raster on the grid of the product, with nearest-neighbor resampling. Each cell keeps the value that its basin calculated. The change from 2015 to 2020 was calculated cell by cell as the 2020 value minus the 2015 value.</procdesc>
+        <procdate>20261120</procdate>
+      </procstep>
+    </lineage>
+  </dataqual>
+  <spdoinfo>
+    <direct>Raster</direct>
+    <rastinfo>
+      <rasttype>Grid Cell</rasttype>
+      <rowcount>3296</rowcount>
+      <colcount>4689</colcount>
+    </rastinfo>
+  </spdoinfo>
+  <spref>
+    <horizsys>
+      <planar>
+        <mapproj>
+          <mapprojn>Albers_Conical_Equal_Area</mapprojn>
+          <albers>
+            <stdparll>29.5</stdparll>
+            <stdparll>45.5</stdparll>
+            <longcm>-96.0</longcm>
+            <latprjo>23.0</latprjo>
+            <feast>0.0</feast>
+            <fnorth>0.0</fnorth>
+          </albers>
+        </mapproj>
+        <planci>
+          <plance>coordinate pair</plance>
+          <coordrep>
+            <absres>1000</absres>
+            <ordres>1000</ordres>
+          </coordrep>
+          <plandu>meters</plandu>
+        </planci>
+      </planar>
+      <geodetic>
+        <horizdn>North American Datum of 1983</horizdn>
+        <ellips>Geographic Reference System 80</ellips>
+        <semiaxis>6378137.0</semiaxis>
+        <denflat>298.257222101</denflat>
+      </geodetic>
+    </horizsys>
+  </spref>
+  <eainfo>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_rwy.tif</enttypl>
+        <enttypd>Relative Water Yield (RWY) at the basin level (each upstream cell compared with the downstream outlet region of its basin), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>0.0000</rdommin>
+            <rdommax>741.0670</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/&lt;ssp&gt;/&lt;ssp&gt;_diff_rwy.tif</enttypl>
+        <enttypd>Change of the Relative Water Yield (RWY) at the basin level (each upstream cell compared with the downstream outlet region of its basin) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of 2020 minus RWY of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-493.5771</rdommin>
+            <rdommax>145.8908</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/huc4/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_rwy.tif</enttypl>
+        <enttypd>Relative Water Yield (RWY) at the HUC-4 network level (each cell compared with all HUC-4s downstream of its HUC-4), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>0.0000</rdommin>
+            <rdommax>906.7625</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/huc4/&lt;ssp&gt;/&lt;ssp&gt;_diff_rwy.tif</enttypl>
+        <enttypd>Change of the Relative Water Yield (RWY) at the HUC-4 network level (each cell compared with all HUC-4s downstream of its HUC-4) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of 2020 minus RWY of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-701.4751</rdommin>
+            <rdommax>99.8616</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/huc8/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_rwy.tif</enttypl>
+        <enttypd>Relative Water Yield (RWY) at the HUC-8 network level (each cell compared with all HUC-8s downstream of its HUC-8), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>0.0000</rdommin>
+            <rdommax>21773942</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/huc8/&lt;ssp&gt;/&lt;ssp&gt;_diff_rwy.tif</enttypl>
+        <enttypd>Change of the Relative Water Yield (RWY) at the HUC-8 network level (each cell compared with all HUC-8s downstream of its HUC-8) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of 2020 minus RWY of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-1466840.5</rdommin>
+            <rdommax>333410.28</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/huc12/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_rwy.tif</enttypl>
+        <enttypd>Relative Water Yield (RWY) at the HUC-12 network level (each cell compared with all HUC-12s downstream of its HUC-12), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>0.0000</rdommin>
+            <rdommax>75865184</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>rwy/huc12/&lt;ssp&gt;/&lt;ssp&gt;_diff_rwy.tif</enttypl>
+        <enttypd>Change of the Relative Water Yield (RWY) at the HUC-12 network level (each cell compared with all HUC-12s downstream of its HUC-12) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 800-meter Quickflow grid (ESRI:102003).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>RWY of 2020 minus RWY of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-8381984.5</rdommin>
+            <rdommax>450184.0</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrc.tif</enttypl>
+        <enttypd>Water Resource Contribution (WRC) at the basin level (each upstream cell compared with the downstream outlet region of its basin), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-1045862912</rdommin>
+            <rdommax>975545920</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrc.tif</enttypl>
+        <enttypd>Change of the Water Resource Contribution (WRC) at the basin level (each upstream cell compared with the downstream outlet region of its basin) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of 2020 minus WRC of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-913587136</rdommin>
+            <rdommax>890569920</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/huc4/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrc.tif</enttypl>
+        <enttypd>Water Resource Contribution (WRC) at the HUC-4 network level (each cell compared with all HUC-4s downstream of its HUC-4), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-324501472</rdommin>
+            <rdommax>350480448</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/huc4/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrc.tif</enttypl>
+        <enttypd>Change of the Water Resource Contribution (WRC) at the HUC-4 network level (each cell compared with all HUC-4s downstream of its HUC-4) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of 2020 minus WRC of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-317933344</rdommin>
+            <rdommax>210211600</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/huc8/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrc.tif</enttypl>
+        <enttypd>Water Resource Contribution (WRC) at the HUC-8 network level (each cell compared with all HUC-8s downstream of its HUC-8), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-255201920</rdommin>
+            <rdommax>241640720</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/huc8/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrc.tif</enttypl>
+        <enttypd>Change of the Water Resource Contribution (WRC) at the HUC-8 network level (each cell compared with all HUC-8s downstream of its HUC-8) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of 2020 minus WRC of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-170566416</rdommin>
+            <rdommax>116256104</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/huc12/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrc.tif</enttypl>
+        <enttypd>Water Resource Contribution (WRC) at the HUC-12 network level (each cell compared with all HUC-12s downstream of its HUC-12), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-178657216</rdommin>
+            <rdommax>219541936</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrc/huc12/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrc.tif</enttypl>
+        <enttypd>Change of the Water Resource Contribution (WRC) at the HUC-12 network level (each cell compared with all HUC-12s downstream of its HUC-12) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRC of 2020 minus WRC of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-164933056</rdommin>
+            <rdommax>142039952</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrd/huc4/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrd.tif</enttypl>
+        <enttypd>Water Resource Dependency (WRD) at the HUC-4 network level (each HUC-4 compared with the surplus of all its upstream HUC-4s), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRD of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-7505.6421</rdommin>
+            <rdommax>2832.6038</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrd/huc4/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrd.tif</enttypl>
+        <enttypd>Change of the Water Resource Dependency (WRD) at the HUC-4 network level (each HUC-4 compared with the surplus of all its upstream HUC-4s) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRD of 2020 minus WRD of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-2685.7761</rdommin>
+            <rdommax>7424.6333</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrd/huc8/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrd.tif</enttypl>
+        <enttypd>Water Resource Dependency (WRD) at the HUC-8 network level (each HUC-8 compared with the surplus of all its upstream HUC-8s), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRD of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-2385.3677</rdommin>
+            <rdommax>42094.352</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrd/huc8/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrd.tif</enttypl>
+        <enttypd>Change of the Water Resource Dependency (WRD) at the HUC-8 network level (each HUC-8 compared with the surplus of all its upstream HUC-8s) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRD of 2020 minus WRD of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-11362.826</rdommin>
+            <rdommax>3382.2864</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrd/huc12/&lt;ssp&gt;/&lt;ssp&gt;_&lt;year&gt;_wrd.tif</enttypl>
+        <enttypd>Water Resource Dependency (WRD) at the HUC-12 network level (each HUC-12 compared with the surplus of all its upstream HUC-12s), for scenario &lt;ssp&gt; (SSP245 or SSP370) and &lt;year&gt; (2015 to 2020), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRD of the grid cell. Dimensionless ratio.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-19985138</rdommin>
+            <rdommax>40371088</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <detailed>
+      <enttyp>
+        <enttypl>wrd/huc12/&lt;ssp&gt;/&lt;ssp&gt;_diff_wrd.tif</enttypl>
+        <enttypd>Change of the Water Resource Dependency (WRD) at the HUC-12 network level (each HUC-12 compared with the surplus of all its upstream HUC-12s) from 2015 to 2020 (2020 minus 2015), for scenario &lt;ssp&gt; (SSP245 or SSP370), on the 1000-meter grid (EPSG:5070).</enttypd>
+        <enttypds>Producer defined</enttypds>
+      </enttyp>
+      <attr>
+        <attrlabl>Value</attrlabl>
+        <attrdef>WRD of 2020 minus WRD of 2015 for the grid cell. Dimensionless.</attrdef>
+        <attrdefs>Producer defined</attrdefs>
+        <attrdomv>
+          <rdom>
+            <rdommin>-5421616.5</rdommin>
+            <rdommax>23596730</rdommax>
+          </rdom>
+        </attrdomv>
+      </attr>
+    </detailed>
+    <overview>
+      <eaover>All values are dimensionless ratios, or the difference of two ratios for the change files. NaN is the nodata value. A cell is NaN if it is outside all basins, outside the CONUS land area of the input grids, or in an area without a value of the index (see the completeness report): the downstream outlet region of a basin at the basin level, a unit without downstream units for RWY and WRC at a network level, and a headwater unit for WRD. A cell is also NaN where the index is not defined: the WRC where |qi - wc| is less than 0.000001 mm/yr, and the RWY where the mean downstream Quickflow is not positive. In a change file, a cell is NaN if it is NaN in 2015 or in 2020. The RWY rasters are on the 800-meter Quickflow grid (ESRI:102003). The WRC and WRD rasters are on the 1000-meter grid (EPSG:5070). See data_dictionary.csv for the machine-readable version of this table.</eaover>
+      <eadetcit>n/a</eadetcit>
+    </overview>
+  </eainfo>
+  <distinfo>
+    <distrib>
+      <!-- TODO: distributor of the release -->
+      <cntinfo>
+        <cntperp>
+          <cntper>TODO - distributor</cntper>
+          <cntorg>TODO - organization</cntorg>
+        </cntperp>
+        <cntaddr>
+          <addrtype>mailing and physical</addrtype>
+          <address>TODO - address</address>
+          <city>TODO - city</city>
+          <state>TODO - state</state>
+          <postal>TODO - postal code</postal>
+          <country>USA</country>
+        </cntaddr>
+        <cntvoice>TODO - telephone</cntvoice>
+        <cntemail>TODO - email</cntemail>
+      </cntinfo>
+    </distrib>
+    <distliab>Any use of trade, product or firm names is for descriptive purposes only and does not imply endorsement by the U.S. Geological Survey.
+Although this information product, for the most part, is in the public domain, it also contains copyrighted materials as noted in the text. Permission to reproduce copyrighted items for other than personal use must be secured from the copyright owner.
+This database has been approved for release and publication by the Director of the USGS. Although this database has been subjected to rigorous review and is substantially complete, the USGS reserves the right to revise the data pursuant to further analysis and review. Furthermore, it is released on condition that neither the USGS nor the United States Government may be held liable for any damages resulting from its authorized or unauthorized use.
+Although these data have been processed successfully on a computer system at the U.S. Geological Survey, no warranty expressed or implied is made regarding the display or utility of the data on any other system, or for general or scientific purposes, nor shall the act of distribution constitute any such warranty. The U.S. Geological Survey shall not be held liable for improper or incorrect use of the data described and/or contained herein.</distliab>
+    <stdorder>
+      <digform>
+        <digtinfo>
+          <formname>GeoTIFF (.tif)</formname>
+        </digtinfo>
+        <digtopt>
+          <onlinopt>
+            <computer>
+              <networka>
+                <networkr>TODO - DOI link</networkr>
+              </networka>
+            </computer>
+          </onlinopt>
+        </digtopt>
+      </digform>
+      <fees>None. No fees are applicable for obtaining the data set.</fees>
+    </stdorder>
+  </distinfo>
+  <metainfo>
+    <metd>20261119</metd>
+    <metc>
+      <cntinfo>
+        <cntperp>
+          <cntper>TODO - metadata contact person</cntper>
+          <cntorg>TODO - organization</cntorg>
+        </cntperp>
+        <cntpos>TODO - position</cntpos>
+        <cntaddr>
+          <addrtype>physical</addrtype>
+          <address>TODO - address</address>
+          <city>TODO - city</city>
+          <state>TODO - state</state>
+          <postal>TODO - postal code</postal>
+          <country>US</country>
+        </cntaddr>
+        <cntvoice>TODO - telephone</cntvoice>
+        <cntemail>TODO - email</cntemail>
+      </cntinfo>
+    </metc>
+    <metstdn>FGDC Content Standard for Digital Geospatial Metadata</metstdn>
+    <metstdv>FGDC-STD-001-1998</metstdv>
+  </metainfo>
+</metadata>
